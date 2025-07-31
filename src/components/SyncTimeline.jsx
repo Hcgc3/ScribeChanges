@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button.jsx';
-import { Card, CardContent } from '@/components/ui/card.jsx';
+import { Button } from '@/components/Ui/button.jsx';
+import { Card, CardContent } from '@/components/Ui/card.jsx';
 import { Play, Pause, Plus, Trash2, Move } from 'lucide-react';
 
 const SyncTimeline = ({ 

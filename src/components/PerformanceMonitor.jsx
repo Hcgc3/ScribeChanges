@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button.jsx';
-import { Card, CardContent } from '@/components/ui/card.jsx';
+import { Button } from '@/components/Ui/button.jsx';
+import { Card, CardContent } from '@/components/Ui/card.jsx';
 import { 
   Activity, 
   Cpu, 
