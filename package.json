@@ -9,6 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview"
   },
+  "// compatibility notes": {
+    "react": "Fixed at 18.3.1 for compatibility with react-day-picker@8.10.1",
+    "date-fns": "Fixed at 3.6.0 to satisfy react-day-picker peer dependency requirements (^2.28.0 || ^3.0.0)",
+    "react-day-picker": "Fixed at 8.10.1 as requested, requires date-fns 3.x not 4.x"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
     "@radix-ui/react-accordion": "^1.2.10",
@@ -42,15 +47,15 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "date-fns": "^4.1.0",
+    "date-fns": "3.6.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.15.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.510.0",
     "next-themes": "^0.4.6",
-    "react": "^19.1.0",
+    "react": "18.3.1",
     "react-day-picker": "8.10.1",
-    "react-dom": "^19.1.0",
+    "react-dom": "18.3.1",
     "react-hook-form": "^7.56.3",
     "react-resizable-panels": "^3.0.2",
     "react-router-dom": "^7.6.1",
@@ -65,8 +70,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.4.1",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
