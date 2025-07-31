@@ -72,21 +72,32 @@ Um aplicativo web moderno e responsivo para visualização e reprodução de par
 ### Instalação
 ```bash
 # Clone o repositório
-git clone <repository-url>
-cd sheet-music-viewer
+git clone https://github.com/Hcgc3/Midi-stuff-for-music.git
+cd Midi-stuff-for-music
 
 # Instale as dependências
-pnpm install
+npm install --legacy-peer-deps
+# ou se você tiver pnpm instalado:
+# pnpm install
 
 # Execute em modo de desenvolvimento
-pnpm dev
+npm run dev
+# ou com pnpm:
+# pnpm dev
 
 # Build para produção
-pnpm build
+npm run build
+# ou com pnpm:
+# pnpm build
+
+# Visualizar build de produção
+npm run preview
+# ou com pnpm:
+# pnpm preview
 ```
 
 ### Acesso
-- **Desenvolvimento**: http://localhost:5174
+- **Desenvolvimento**: http://localhost:5173
 - **Produção**: Após build, servir pasta `dist/`
 
 ## 📖 Guia de Uso
@@ -134,44 +145,112 @@ pnpm build
 - **Inputs**: Bordas e focus states consistentes
 - **Modais**: Overlay com backdrop blur
 
+## 🏗️ Arquitetura Moderna e Boas Práticas
+
+### Organização do Projeto
+Este projeto segue as melhores práticas modernas do React:
+
+#### Estrutura Modular
+- **Separação de responsabilidades**: Cada diretório tem um propósito específico
+- **Components reutilizáveis**: Componentes UI isolados e testáveis
+- **Custom Hooks**: Lógica reutilizável extraída em hooks customizados
+- **Absolute Imports**: Imports limpos usando alias `@/` para melhor manutenibilidade
+
+#### Vantagens da Estrutura Atual
+- **Escalabilidade**: Fácil adicionar novos componentes e funcionalidades
+- **Manutenibilidade**: Estrutura clara facilita localização e modificação de código
+- **Reutilização**: Componentes e utils podem ser reutilizados em todo o projeto
+- **Colaboração**: Estrutura familiar para desenvolvedores React
+
+### Configuração de Desenvolvimento
+- **Vite**: Build tool rápido com HMR (Hot Module Replacement)
+- **ESLint**: Linting configurado para React
+- **Tailwind CSS**: Sistema de design utilitário
+- **Absolute Imports**: Configuração via Vite e jsconfig.json
+
 ## 🔧 Arquitetura do Código
 
 ### Estrutura de Pastas
 ```
 src/
-├── components/           # Componentes React
-│   ├── ui/              # Componentes base (Button, Card, etc.)
+├── components/           # Componentes React reutilizáveis
+│   ├── Ui/              # Componentes base (Button, Card, etc.)
 │   ├── SheetMusicRenderer.jsx
 │   ├── PlaybackControls.jsx
 │   ├── MyScoresManager.jsx
 │   ├── YouTubePlayer.jsx
 │   ├── SyncTimeline.jsx
 │   └── ...
-├── App.jsx              # Componente principal
-└── main.jsx            # Entry point
+├── pages/               # Páginas de nível superior
+│   └── App.jsx         # Componente principal da aplicação
+├── hooks/               # Custom React hooks
+│   └── use-mobile.js   # Hook para detecção de dispositivos móveis
+├── utils/               # Funções utilitárias/helper
+│   ├── audioAnalysis.js # Utilitários de análise de áudio
+│   └── utils.js        # Utilitários gerais
+├── assets/              # Imagens, fontes e outros assets estáticos
+│   └── react.svg       # Logo e recursos visuais
+├── styles/              # CSS global e compartilhado
+│   ├── index.css       # Estilos globais e configuração Tailwind
+│   └── App.css         # Estilos específicos da aplicação
+├── lib/                 # Utilitários de biblioteca compartilhados
+│   └── utils.js        # Utilitários para componentes (cn function)
+└── main.jsx            # Entry point da aplicação
+```
+
+### Configuração de Absolute Imports
+O projeto usa imports absolutos configurados via Vite com o alias `@/`:
+
+```javascript
+// Ao invés de imports relativos:
+import Button from '../../../components/Ui/button.jsx'
+
+// Use imports absolutos:
+import Button from '@/components/Ui/button.jsx'
+```
+
+**Configuração no vite.config.js:**
+```javascript
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+})
 ```
 
 ### Componentes Principais
 
-#### App.jsx
+#### App.jsx (src/pages/)
 - **Responsabilidade**: Gerenciamento de estado global e roteamento
 - **Estado**: currentView, midiData, playback controls, sync data
 - **Navegação**: Controla transições entre telas
+- **Imports**: Usa absolute imports (@/) para todos os componentes
 
-#### SheetMusicRenderer.jsx
+#### SheetMusicRenderer.jsx (src/components/)
 - **Responsabilidade**: Renderização de partituras com VexFlow
 - **Entrada**: Dados MIDI parseados
 - **Saída**: SVG de notação musical
 
-#### PlaybackControls.jsx
+#### PlaybackControls.jsx (src/components/)
 - **Responsabilidade**: Interface de controles de reprodução
 - **Funcionalidades**: Play/pause, volume, velocidade, instrumentos
 - **Integração**: Tone.js para síntese de áudio
 
-#### MyScoresManager.jsx
+#### MyScoresManager.jsx (src/components/)
 - **Responsabilidade**: Gerenciamento completo de biblioteca
 - **Funcionalidades**: CRUD, busca, filtros, estatísticas
 - **Persistência**: localStorage
+
+#### Custom Hooks (src/hooks/)
+- **use-mobile.js**: Hook para detecção de dispositivos móveis
+- **Uso**: `const isMobile = useIsMobile()` para layouts responsivos
+
+#### Utilitários (src/utils/)
+- **audioAnalysis.js**: Análise de áudio em tempo real
+- **utils.js**: Funções utilitárias gerais
+- **src/lib/utils.js**: Função `cn()` para combinação de classes CSS
 
 ### Fluxo de Dados
 1. **Upload**: Arquivo → Parser MIDI → Estado global
@@ -224,9 +303,48 @@ src/
 
 ### Padrões de Código
 - **ESLint**: Configuração padrão React
-- **Prettier**: Formatação automática
-- **Commits**: Conventional Commits
-- **Testes**: Jest + React Testing Library
+- **Prettier**: Formatação automática (se configurado)
+- **Commits**: Conventional Commits recomendado
+- **Estrutura**: Siga a organização de pastas estabelecida
+
+### Diretrizes de Desenvolvimento
+#### Adicionando Novos Componentes
+```bash
+# Componentes reutilizáveis
+src/components/NewComponent.jsx
+
+# Componentes UI base
+src/components/Ui/new-ui-component.jsx
+
+# Use absolute imports
+import { Button } from '@/components/Ui/button'
+import NewComponent from '@/components/NewComponent'
+```
+
+#### Adicionando Custom Hooks
+```bash
+# Coloque em src/hooks/
+src/hooks/use-new-feature.js
+
+# Nomeação: sempre use-*
+export function useNewFeature() { ... }
+```
+
+#### Adicionando Utilitários
+```bash
+# Utilitários gerais
+src/utils/new-utility.js
+
+# Utilitários de biblioteca (para components)
+src/lib/new-lib-utility.js
+```
+
+#### Adicionando Assets
+```bash
+# Imagens, ícones, fontes
+src/assets/images/new-image.svg
+src/assets/fonts/new-font.woff2
+```
 
 ## 📄 Licença
 

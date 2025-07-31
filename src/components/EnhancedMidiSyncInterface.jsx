@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button } from '@/components/ui/button.jsx';
-import { Card, CardContent } from '@/components/ui/card.jsx';
+import { Button } from '@/components/Ui/button.jsx';
+import { Card, CardContent } from '@/components/Ui/card.jsx';
 import { Play, Pause, Square, RotateCcw, Volume2 } from 'lucide-react';
 import { AudioAnalyzer, analyzeAudioFile, generateMockIntensityFromMIDI, createVisualizationData } from '../utils/audioAnalysis.js';
 

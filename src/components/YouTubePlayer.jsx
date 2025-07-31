@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button.jsx';
+import { Button } from '@/components/Ui/button.jsx';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
 const YouTubePlayer = ({ 

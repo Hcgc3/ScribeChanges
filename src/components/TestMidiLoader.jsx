@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '@/components/ui/button.jsx';
+import { Button } from '@/components/Ui/button.jsx';
 import { Music } from 'lucide-react';
 
 const TestMidiLoader = ({ onMidiLoad }) => {
