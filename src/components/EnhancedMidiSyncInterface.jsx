@@ -26,6 +26,7 @@ const EnhancedMidiSyncInterface = ({
   const audioAnalyzerRef = useRef(null);
   const animationFrameRef = useRef(null);
   const youtubePlayerRef = useRef(null);
+  const realTimeUpdateRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingWaveform, setIsDraggingWaveform] = useState(false);
   const progressBarRef = useRef(null);
@@ -479,6 +480,33 @@ const EnhancedMidiSyncInterface = ({
 
   const handleMouseUpWaveform = () => {
     setIsDraggingWaveform(false);
+  };
+
+  // Progress bar interaction handlers
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    handleMouseMove(e);
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (isDragging && progressBarRef.current) {
+      const progressBar = progressBarRef.current;
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const newTime = (clickX / rect.width) * duration;
+      const clampedTime = Math.max(0, Math.min(newTime, duration));
+      
+      setCurrentTime(clampedTime);
+      if (audioRef.current) {
+        audioRef.current.currentTime = clampedTime;
+      } else if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.seekTo(clampedTime, true);
+      }
+    }
+  }, [isDragging, duration]);
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
   };
 
   useEffect(() => {
