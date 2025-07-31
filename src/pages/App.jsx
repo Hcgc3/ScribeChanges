@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button.jsx';
-import { Card, CardContent } from '@/components/ui/card.jsx';
+import { Button } from '@/components/Ui/button.jsx';
+import { Card, CardContent } from '@/components/Ui/card.jsx';
 import { Upload, Music, Play, Pause, Volume2, Settings, FileMusic, Home } from 'lucide-react';
-import './App.css';
+import '@/styles/App.css';
 
 // Import Tone.js and MIDI parsing
 import * as Tone from 'tone';
 import { Midi } from '@tonejs/midi';
 
 // Import custom components
-import SheetMusicRenderer from './components/SheetMusicRenderer.jsx';
-import PlaybackControls from './components/PlaybackControls.jsx';
-import TestMidiLoader from './components/TestMidiLoader.jsx';
-import YouTubePlayer from './components/YouTubePlayer.jsx';
-import EnhancedMidiSyncInterface from './components/EnhancedMidiSyncInterface.jsx';
-import MyScoresManager from './components/MyScoresManager.jsx';
+import SheetMusicRenderer from '@/components/SheetMusicRenderer.jsx';
+import PlaybackControls from '@/components/PlaybackControls.jsx';
+import TestMidiLoader from '@/components/TestMidiLoader.jsx';
+import YouTubePlayer from '@/components/YouTubePlayer.jsx';
+import EnhancedMidiSyncInterface from '@/components/EnhancedMidiSyncInterface.jsx';
+import MyScoresManager from '@/components/MyScoresManager.jsx';
 
 // Main App Component
 function App() {
