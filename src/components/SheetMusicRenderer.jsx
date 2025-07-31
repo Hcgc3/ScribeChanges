@@ -9,13 +9,35 @@ const SheetMusicRenderer = ({ midiData, width = 800, height = 600 }) => {
   // Convert MIDI data to VexFlow notes
   const convertMidiToVexFlow = (midiData) => {
     if (!midiData || !midiData.tracks || midiData.tracks.length === 0) {
+      console.log('No MIDI data or tracks available:', midiData);
       return [];
     }
 
+    console.log('MIDI data structure:', midiData);
+    console.log('Number of tracks:', midiData.tracks.length);
+    
     const notes = [];
-    const track = midiData.tracks[0]; // Use first track for now
+    
+    // Find the first track with notes
+    let trackWithNotes = null;
+    for (let i = 0; i < midiData.tracks.length; i++) {
+      const track = midiData.tracks[i];
+      console.log(`Track ${i}:`, track);
+      console.log(`Track ${i} notes length:`, track.notes ? track.notes.length : 'no notes property');
+      
+      if (track.notes && track.notes.length > 0) {
+        trackWithNotes = track;
+        console.log(`Using track ${i} with ${track.notes.length} notes`);
+        break;
+      }
+    }
+    
+    if (!trackWithNotes) {
+      console.log('No tracks with notes found');
+      return [];
+    }
 
-    track.notes.forEach((note, index) => {
+    trackWithNotes.notes.forEach((note, index) => {
       try {
         // Convert MIDI note number to VexFlow note format
         const noteNames = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
