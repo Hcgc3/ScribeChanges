@@ -13,9 +13,26 @@ const SheetMusicRenderer = ({ midiData, width = 800, height = 600 }) => {
     }
 
     const notes = [];
-    const track = midiData.tracks[0]; // Use first track for now
+    
+    // Find the first track with notes
+    let trackWithNotes = null;
+    for (let i = 0; i < midiData.tracks.length; i++) {
+      const track = midiData.tracks[i];
+      if (track.notes && track.notes.length > 0) {
+        trackWithNotes = track;
+        break;
+      }
+    }
+    
+    if (!trackWithNotes) {
+      return [];
+    }
 
-    track.notes.forEach((note, index) => {
+    // Convert first few notes and ensure they fit in measures
+    const maxNotes = 16; // Limit for demo - 4 measures of 4 quarter notes each
+    const selectedNotes = trackWithNotes.notes.slice(0, maxNotes);
+    
+    selectedNotes.forEach((note, index) => {
       try {
         // Convert MIDI note number to VexFlow note format
         const noteNames = ['c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b'];
@@ -23,17 +40,10 @@ const SheetMusicRenderer = ({ midiData, width = 800, height = 600 }) => {
         const noteName = noteNames[note.midi % 12];
         const vexNote = noteName + '/' + octave;
 
-        // Determine note duration based on MIDI duration
-        let duration = 'q'; // quarter note default
-        if (note.duration <= 0.25) duration = '16';
-        else if (note.duration <= 0.5) duration = '8';
-        else if (note.duration <= 1) duration = 'q';
-        else if (note.duration <= 2) duration = 'h';
-        else duration = 'w';
-
+        // Use quarter notes for simplicity and consistency
         const vexFlowNote = new StaveNote({
           keys: [vexNote],
-          duration: duration
+          duration: 'q'
         });
 
         // Add accidentals if needed
@@ -47,7 +57,13 @@ const SheetMusicRenderer = ({ midiData, width = 800, height = 600 }) => {
       }
     });
 
-    return notes.slice(0, 8); // Limit to 8 notes for demo
+    // Ensure we have notes in multiples of 4 for 4/4 time signature
+    while (notes.length % 4 !== 0 && notes.length < 16) {
+      // Add rest notes to complete the measure
+      notes.push(new StaveNote({ keys: ['b/4'], duration: 'qr' }));
+    }
+
+    return notes.slice(0, 16); // Limit to 16 notes (4 measures of 4 quarter notes)
   };
 
   // Render the sheet music
@@ -66,24 +82,46 @@ const SheetMusicRenderer = ({ midiData, width = 800, height = 600 }) => {
       const context = renderer.getContext();
       context.setFont('Arial', 10);
 
-      // Create a stave
-      const stave = new Stave(10, 40, width - 20);
-      stave.addClef('treble').addTimeSignature('4/4');
-      stave.setContext(context).draw();
-
       // Convert MIDI to VexFlow notes
       const notes = convertMidiToVexFlow(midiData);
 
       if (notes.length > 0) {
-        // Create a voice in 4/4 and add the notes
-        const voice = new Voice({ num_beats: 4, beat_value: 4 });
-        voice.addTickables(notes);
+        // Calculate number of measures (assuming 4 notes per measure for 4/4 time)
+        const notesPerMeasure = 4;
+        const numMeasures = Math.ceil(notes.length / notesPerMeasure);
+        const staveWidth = Math.max(200, (width - 40) / numMeasures);
 
-        // Format and justify the notes to fit the stave
-        new Formatter().joinVoices([voice]).format([voice], width - 40);
+        // Create measures and render them
+        for (let m = 0; m < numMeasures; m++) {
+          const startNote = m * notesPerMeasure;
+          const endNote = Math.min(startNote + notesPerMeasure, notes.length);
+          const measureNotes = notes.slice(startNote, endNote);
 
-        // Render voice
-        voice.draw(context, stave);
+          // Fill incomplete measures with rests
+          while (measureNotes.length < notesPerMeasure) {
+            measureNotes.push(new StaveNote({ keys: ['b/4'], duration: 'qr' }));
+          }
+
+          // Create stave for this measure
+          const stave = new Stave(10 + (m * staveWidth), 40, staveWidth);
+          
+          // Add clef and time signature only to first measure
+          if (m === 0) {
+            stave.addClef('treble').addTimeSignature('4/4');
+          }
+          
+          stave.setContext(context).draw();
+
+          // Create voice for this measure
+          const voice = new Voice({ num_beats: 4, beat_value: 4 });
+          voice.addTickables(measureNotes);
+
+          // Format and justify the notes to fit the measure
+          new Formatter().joinVoices([voice]).format([voice], staveWidth - 20);
+
+          // Render voice
+          voice.draw(context, stave);
+        }
       } else {
         // Draw placeholder text if no notes
         context.fillText('No notes found in MIDI file', width / 2 - 80, height / 2);
