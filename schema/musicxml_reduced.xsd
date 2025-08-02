@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
+    <!-- Reduced MusicXML XSD for local validation -->
+    <!-- Removed all <xs:import> and external namespace references -->
+    <!-- Only basic types and score-partwise structure included -->
+
+    <xs:element name="score-partwise">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="work" minOccurs="0"/>
+                <xs:element name="identification" minOccurs="0"/>
+                <xs:element name="defaults" minOccurs="0"/>
+                <xs:element name="credit" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="part-list" minOccurs="1"/>
+                <xs:element name="part" minOccurs="1" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="version" type="xs:string" use="optional"/>
+        </xs:complexType>
+
+    <!-- All other element definitions are now direct children of <xs:schema> -->
+    <xs:element name="work">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="work-title" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="identification">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="creator" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="encoding" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="creator">
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base="xs:string">
+                    <xs:attribute name="type" type="xs:string" use="optional"/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="encoding">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="software" type="xs:string" minOccurs="0"/>
+                <xs:element name="encoding-date" type="xs:string" minOccurs="0"/>
+                <xs:element name="supports" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="supports">
+        <xs:complexType>
+            <xs:attribute name="element" type="xs:string" use="optional"/>
+            <xs:attribute name="type" type="xs:string" use="optional"/>
+            <xs:attribute name="attribute" type="xs:string" use="optional"/>
+            <xs:attribute name="value" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="defaults">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="scaling" minOccurs="0"/>
+                <xs:element name="page-layout" minOccurs="0"/>
+                <xs:element name="appearance" minOccurs="0"/>
+                <xs:element name="music-font" minOccurs="0"/>
+                <xs:element name="word-font" minOccurs="0"/>
+                <xs:element name="lyric-font" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="scaling">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="millimeters" type="xs:string"/>
+                <xs:element name="tenths" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="page-layout">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="page-height" type="xs:string"/>
+                <xs:element name="page-width" type="xs:string"/>
+                <xs:element name="page-margins" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="page-margins">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="left-margin" type="xs:string"/>
+                <xs:element name="right-margin" type="xs:string"/>
+                <xs:element name="top-margin" type="xs:string"/>
+                <xs:element name="bottom-margin" type="xs:string"/>
+            </xs:sequence>
+            <xs:attribute name="type" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="appearance">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="line-width" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="note-size" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="line-width">
+        <xs:complexType>
+            <xs:attribute name="type" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="note-size">
+        <xs:complexType>
+            <xs:attribute name="type" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="music-font">
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base="xs:string">
+                    <xs:attribute name="font-family" type="xs:string" use="optional"/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="word-font">
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base="xs:string">
+                    <xs:attribute name="font-family" type="xs:string" use="optional"/>
+                    <xs:attribute name="font-size" type="xs:string" use="optional"/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="lyric-font">
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base="xs:string">
+                    <xs:attribute name="font-family" type="xs:string" use="optional"/>
+                    <xs:attribute name="font-size" type="xs:string" use="optional"/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="credit">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="credit-type" type="xs:string" minOccurs="0"/>
+                <xs:element name="credit-words" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+            <xs:attribute name="page" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="part-list">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="score-part" minOccurs="1" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="score-partwise">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="work" minOccurs="0"/>
+                <xs:element name="identification" minOccurs="0"/>
+                <xs:element name="defaults" minOccurs="0"/>
+                <xs:element name="credit" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="part-list" minOccurs="1"/>
+                <xs:element name="part" minOccurs="1" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="version" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- All other element definitions are now direct children of <xs:schema> -->
+    <xs:element name="work">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="work-title" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="identification">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="creator" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:element name="encoding" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="creator">
+        <xs:complexType>
+            <xs:simpleContent>
+                <xs:extension base="xs:string">
+                    <xs:attribute name="type" type="xs:string" use="optional"/>
+                </xs:extension>
+            </xs:simpleContent>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="encoding">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="software" type="xs:string" minOccurs="0"/>
+                <xs:element name="encoding-date" type="xs:string" minOccurs="0"/>
+                <xs:element name="supports" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="supports">
+        <xs:complexType>
+            <xs:attribute name="element" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="score-instrument">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="instrument-name" type="xs:string"/>
+                <xs:element name="instrument-sound" type="xs:string" minOccurs="0"/>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="midi-device">
+        <xs:complexType>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+            <xs:attribute name="port" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="midi-instrument">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="midi-channel" type="xs:string"/>
+                <xs:element name="midi-program" type="xs:string"/>
+                <xs:element name="volume" type="xs:string"/>
+                <xs:element name="pan" type="xs:string"/>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="part">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="measure" minOccurs="1" maxOccurs="unbounded"/>
+            </xs:sequence>
+            <xs:attribute name="id" type="xs:string" use="required"/>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="measure">
+        <xs:complexType>
+            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                <xs:element name="attributes" minOccurs="0"/>
+                <xs:element name="note"/>
+                <xs:element name="direction"/>
+                <xs:element name="harmony"/>
+            </xs:choice>
+            <xs:attribute name="number" type="xs:string" use="required"/>
+            <xs:attribute name="width" type="xs:string" use="optional"/>
+        </xs:complexType>
+    </xs:element>
+
+    <!-- Place new element definitions at the end of the schema -->
+    <xs:element name="attributes">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="divisions" type="xs:string" minOccurs="0"/>
+                <xs:element name="key" minOccurs="0"/>
+                <xs:element name="time" minOccurs="0"/>
+                <xs:element name="clef" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="key">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="fifths" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="time">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="beats" type="xs:string"/>
+                <xs:element name="beat-type" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="clef">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="sign" type="xs:string"/>
+                <xs:element name="line" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    </xs:element>
+
+    <xs:element name="note">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="pitch" minOccurs="0"/>
+                <xs:element name="duration" minOccurs="0"/>
+                <xs:element name="voice" minOccurs="0"/>
+                <xs:element name="type" minOccurs="0"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="direction" type="xs:string"/>
+    <xs:element name="harmony" type="xs:string"/>
+    <xs:element name="pitch">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="step" type="xs:string"/>
+                <xs:element name="octave" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    <xs:element name="duration" type="xs:string"/>
+    <xs:element name="voice" type="xs:string"/>
+    <xs:element name="type" type="xs:string"/>
+</xs:schema>

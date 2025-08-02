@@ -9,12 +9,15 @@ import * as Tone from 'tone';
 import { Midi } from '@tonejs/midi';
 
 // Import custom components
-import SheetMusicRenderer from '@/components/SheetMusicRenderer.jsx';
+// import SheetMusicRenderer from '@/components/SheetMusicRenderer.jsx';
+import SheetMusicOSMD from '@/components/SheetMusicOSMD.jsx';
+import { midiBufferToMusicXML } from '@/converter/converter.js';
 import PlaybackControls from '@/components/PlaybackControls.jsx';
 import TestMidiLoader from '@/components/TestMidiLoader.jsx';
 import YouTubePlayer from '@/components/YouTubePlayer.jsx';
 import EnhancedMidiSyncInterface from '@/components/EnhancedMidiSyncInterface.jsx';
 import MyScoresManager from '@/components/MyScoresManager.jsx';
+import MidiUploadAndConvert from '@/components/MidiUploadAndConvert.jsx';
 
 // Main App Component
 function App() {
@@ -23,29 +26,83 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isControlsCollapsed, setIsControlsCollapsed] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [youtubeVideoId, setYoutubeVideoId] = useState('');
   const [syncPoints, setSyncPoints] = useState([]);
   const [beatMarkings, setBeatMarkings] = useState([]);
   const [audioFile, setAudioFile] = useState(null);
   const [currentScore, setCurrentScore] = useState(null);
+  // MusicXML string (converted from MIDI)
+  const [musicXML, setMusicXML] = useState(null);
 
   // Handle file upload
   const handleFileUpload = async (file) => {
-    if (file && (file.type === 'audio/midi' || file.name.endsWith('.mid') || file.name.endsWith('.midi'))) {
+    if (!file) return;
+    // MIDI file
+    if (file.type === 'audio/midi' || file.name.endsWith('.mid') || file.name.endsWith('.midi')) {
       try {
         const arrayBuffer = await file.arrayBuffer();
-        const midi = new Midi(arrayBuffer);
+        let midi;
+        try {
+          midi = new Midi(new Uint8Array(arrayBuffer));
+        } catch (parseErr) {
+          console.error('MIDI parse error:', parseErr);
+          alert('Error parsing MIDI file. Please try a different file.');
+          setMusicXML(null);
+          setMidiData(null);
+          return;
+        }
         setMidiData(midi);
+        // Convert MIDI to MusicXML using new modular converter
+        let xml = '';
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          xml = await midiBufferToMusicXML(arrayBuffer);
+          console.log('MusicXML output:', xml);
+        } catch (convErr) {
+          console.error('MIDI-to-MusicXML conversion error:', convErr);
+          alert('Error converting MIDI to MusicXML. Please try a different file.');
+          setMusicXML(null);
+          return;
+        }
+        if (!xml || typeof xml !== 'string' || !xml.includes('<score-partwise')) {
+          alert('MIDI-to-MusicXML conversion produced invalid output.');
+          setMusicXML(null);
+          return;
+        }
+        setMusicXML(xml);
         console.log('MIDI data loaded:', midi);
-        setCurrentView('sync');
-        console.log('Current view set to sync');
+        setCurrentView('playback');
+        console.log('Current view set to playback');
       } catch (error) {
-        console.error('Error parsing MIDI file:', error);
-        alert('Error parsing MIDI file. Please try a different file.');
+        console.error('Error handling MIDI file:', error);
+        alert('Error handling MIDI file. Please try a different file.');
+        setMusicXML(null);
+        setMidiData(null);
+      }
+    }
+    // MusicXML file
+    else if (
+      file.type === 'application/xml' ||
+      file.name.endsWith('.musicxml') ||
+      file.name.endsWith('.xml')
+    ) {
+      try {
+        const text = await file.text();
+        setMusicXML(text);
+        setMidiData(null); // No MIDI data for direct MusicXML
+        setCurrentView('playback');
+        console.log('MusicXML file loaded');
+      } catch (error) {
+        console.error('Error reading MusicXML file:', error);
+        alert('Error reading MusicXML file. Please try a different file.');
+        setMusicXML(null);
       }
     } else {
-      alert('Please upload a valid MIDI file (.mid or .midi)');
+      alert('Please upload a valid MIDI (.mid, .midi) or MusicXML (.musicxml, .xml) file');
+      setMusicXML(null);
+      setMidiData(null);
     }
   };
 
@@ -117,6 +174,8 @@ function App() {
   }, [currentView, midiData]);
   const handlePlayPause = () => setIsPlaying(!isPlaying);
   const handleStop = () => setIsPlaying(false);
+  // Handler to update currentTime from PlaybackControls
+  const handleCurrentTimeUpdate = (time) => setCurrentTime(time);
   const toggleControlsCollapse = () => setIsControlsCollapsed(!isControlsCollapsed);
 
   // YouTube handlers
@@ -168,63 +227,72 @@ function App() {
   };
 
   // Upload Screen Component
-  const UploadScreen = () => (
-    <div className="min-h-screen sharpblend-gradient flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8 fade-in-up">
-          <div className="flex justify-center mb-4">
-            <div className="p-4 sharpblend-yellow rounded-full pulse-yellow">
-              <Music className="w-12 h-12 text-black" />
+  const UploadScreen = () => {
+    const fileInputRef = React.useRef(null);
+    const handleBrowseClick = () => {
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    };
+    return (
+      <div className="min-h-screen sharpblend-gradient flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl">
+          <div className="text-center mb-8 fade-in-up">
+            <div className="flex justify-center mb-4">
+              <div className="p-4 sharpblend-yellow rounded-full pulse-yellow">
+                <Music className="w-12 h-12 text-black" />
+              </div>
             </div>
+            <h1 className="text-4xl font-bold text-white mb-2">Sheet Music Viewer</h1>
+            <p className="text-gray-300 text-lg">Upload your MIDI file to get started</p>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Sheet Music Viewer</h1>
-          <p className="text-gray-300 text-lg">Upload your MIDI file to get started</p>
-        </div>
 
-        <Card className="bg-card border-border backdrop-blur-sm hover-lift">
-          <CardContent className="p-8">
-            <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
-                isDragOver
-                  ? 'border-primary bg-primary/10'
-                  : 'border-border hover:border-primary hover:bg-primary/5'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <Upload className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-2">
-                Drop your MIDI file here
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                Or click to browse and select a file
-              </p>
-              <input
-                type="file"
-                accept=".mid,.midi,audio/midi"
-                onChange={handleFileInputChange}
-                className="hidden"
-                id="file-input"
-              />
-              <label htmlFor="file-input">
-                <Button className="sharpblend-yellow text-black hover:opacity-90 font-semibold">
+          <Card className="bg-card border-border backdrop-blur-sm hover-lift">
+            <CardContent className="p-8">
+              <div
+                className={`border-2 border-dashed rounded-lg p-12 text-center transition-all duration-300 ${
+                  isDragOver
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-primary hover:bg-primary/5'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <Upload className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-foreground mb-2">
+                  Drop your MIDI file here
+                </h3>
+                <p className="text-muted-foreground mb-6">
+                  Or click to browse and select a file
+                </p>
+                <input
+                  type="file"
+                  accept=".mid,.midi,.musicxml,.xml,audio/midi,application/xml,text/xml"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                  ref={fileInputRef}
+                />
+                <Button
+                  className="sharpblend-yellow text-black hover:opacity-90 font-semibold"
+                  onClick={handleBrowseClick}
+                  type="button"
+                >
                   Browse Files
                 </Button>
-              </label>
-            </div>
-            <div className="mt-6 text-center">
-              <p className="text-muted-foreground text-sm">
-                Supported formats: .mid, .midi
-              </p>
-            </div>
-            
-            <TestMidiLoader onMidiLoad={handleFileUpload} />
-          </CardContent>
-        </Card>
+              </div>
+              <div className="mt-6 text-center">
+                <p className="text-muted-foreground text-sm">
+                  Supported formats: .mid, .midi, .musicxml, .xml
+                </p>
+              </div>
+              <TestMidiLoader onMidiLoad={handleFileUpload} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Sync Screen Component
   const SyncScreen = () => (
@@ -371,11 +439,42 @@ function App() {
 
       {/* Sheet Music Viewer */}
       <div className="flex-1 overflow-hidden">
-        <SheetMusicRenderer 
-          midiData={midiData}
-          width={window.innerWidth - 40}
-          height={isControlsCollapsed ? window.innerHeight - 140 : window.innerHeight - 240}
-        />
+        {/* Use OSMD-based renderer if MusicXML is available, else show placeholder */}
+        {musicXML ? (
+          <SheetMusicOSMD
+            musicXML={musicXML}
+            currentTime={currentTime}
+            onCursorNote={async note => {
+              // Play the highlighted note using Tone.js PolySynth
+              if (!note || !note.halfTone || !note.length) return;
+              // Convert OSMD note to MIDI and duration
+              const midi = note.halfTone;
+              const duration = 0.5; // seconds (adjust as needed)
+              const freq = window.Tone ? window.Tone.Frequency(midi, 'midi').toFrequency() : 440;
+              if (!window.osmdSynth) {
+                // Lazy init Tone.js synth
+                const Tone = (await import('tone')).default || (await import('tone'));
+                window.Tone = Tone;
+                window.osmdSynth = new Tone.PolySynth(Tone.Synth).toDestination();
+              }
+              window.osmdSynth.triggerAttackRelease(freq, duration);
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-white text-gray-500">
+            <div>
+              No MusicXML loaded.<br/>
+              {midiData ? (
+                <>
+                  <div className="mt-2 text-red-500">MIDI-to-MusicXML conversion failed or produced invalid output.</div>
+                  <div className="mt-2 text-xs text-gray-400">Check the browser console for error details.</div>
+                </>
+              ) : (
+                <span>(MIDI-to-MusicXML conversion needed)</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Playback Panel */}
@@ -387,6 +486,7 @@ function App() {
           onStop={handleStop}
           isCollapsed={isControlsCollapsed}
           onToggleCollapse={toggleControlsCollapse}
+          onCurrentTimeUpdate={handleCurrentTimeUpdate}
         />
       </div>
     </div>
@@ -419,6 +519,7 @@ function App() {
   return (
     <div className="min-h-screen">
       {renderCurrentView()}
+      <MidiUploadAndConvert />
     </div>
   );
 }

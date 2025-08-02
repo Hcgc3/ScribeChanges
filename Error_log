@@ -1,0 +1,14 @@
+client:802 WebSocket connection to 'ws://localhost:443/?token=vU3V7ugo42er' failed: 
+createConnection @ client:802Understand this error
+client:841 [vite] failed to connect to websocket (Error: WebSocket closed without opened.). 
+connect @ client:841Understand this error
+client:454 Uncaught (in promise) Error: WebSocket closed without opened.
+    at WebSocket.<anonymous> (client:454:22)Understand this error
+chunk-YQ5BCTVV.js?v=d83455d5:21609 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+tone.js?v=d83455d5:9688  * Tone.js v15.1.22 * 
+tone.js?v=d83455d5:7608 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+testAudioScheduledSourceNodeStartMethodNegativeParametersSupport @ tone.js?v=d83455d5:7608Understand this warning
+tone.js?v=d83455d5:2865 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://developer.chrome.com/blog/autoplay/#web_audio
+start @ tone.js?v=d83455d5:2865Understand this warning
+midiParser.js:8 Uncaught TypeError: Cannot read properties of undefined (reading 'Midi')
+    at midiParser.js:8:18

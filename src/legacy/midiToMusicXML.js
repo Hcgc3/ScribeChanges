@@ -1,0 +1,3 @@
+// Legacy MIDI to MusicXML converter
+// This file has been moved to avoid conflicts with the new modular converter.
+// ...existing code...

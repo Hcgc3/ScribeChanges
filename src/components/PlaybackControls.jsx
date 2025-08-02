@@ -22,7 +22,8 @@ const PlaybackControls = ({
   onPlayPause, 
   onStop,
   isCollapsed = false,
-  onToggleCollapse 
+  onToggleCollapse,
+  onCurrentTimeUpdate
 }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -44,7 +45,7 @@ const PlaybackControls = ({
       try {
         // Create different instruments
         const instruments = {
-          piano: new Tone.PolySynth(Tone.Synth).toDestination(),
+          piano: new Tone.PolySynth(Tone.MonoSynth).toDestination(),
           guitar: new Tone.PolySynth(Tone.PluckSynth).toDestination(),
           violin: new Tone.PolySynth(Tone.FMSynth).toDestination(),
           flute: new Tone.PolySynth(Tone.AMSynth).toDestination()
@@ -131,6 +132,7 @@ const PlaybackControls = ({
         // Update progress
         progressIntervalRef.current = setInterval(() => {
           setCurrentTime(Tone.Transport.seconds);
+          if (onCurrentTimeUpdate) onCurrentTimeUpdate(Tone.Transport.seconds);
         }, 100);
       }
 
@@ -145,6 +147,7 @@ const PlaybackControls = ({
     Tone.Transport.stop();
     Tone.Transport.position = 0;
     setCurrentTime(0);
+    if (onCurrentTimeUpdate) onCurrentTimeUpdate(0);
     
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
@@ -244,7 +247,8 @@ const PlaybackControls = ({
               size="sm"
               onClick={() => {
                 Tone.Transport.seconds = Math.max(0, currentTime - 10);
-                setCurrentTime(Tone.Transport.seconds);
+    setCurrentTime(Tone.Transport.seconds);
+    if (onCurrentTimeUpdate) onCurrentTimeUpdate(Tone.Transport.seconds);
               }}
               className="text-foreground hover:bg-primary hover:text-primary-foreground"
             >

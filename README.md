@@ -1,50 +1,70 @@
-# Sheet Music Viewer - Interactive Music Visualization
 
-Um aplicativo web moderno e responsivo para visualização e reprodução de partituras MIDI com sincronização de áudio/vídeo.
+# Midi Stuff for Music - Modern Sheet Music & MIDI Tools
 
-## 🎵 Funcionalidades Principais
+## 🛠️ MusicXML Output Fixes Roadmap
 
-### 📁 Upload e Gerenciamento de Arquivos
-- **Drag & Drop Interface**: Interface intuitiva para upload de arquivos MIDI
-- **Formatos Suportados**: .mid, .midi
-- **Arquivo de Exemplo**: MIDI de demonstração incluído para testes
-- **Validação de Arquivos**: Verificação automática de formato e integridade
+To ensure the converter output matches the reference MusicXML, follow this iterative workflow:
 
-### 🎼 Visualização de Partituras
-- **Renderização SVG**: Partituras de alta qualidade usando VexFlow
-- **Visualização em Tela Cheia**: Interface otimizada para máxima legibilidade
+1. **Apply a Fix:** Implement one fix from the checklist (e.g., duration mapping, dynamics, beams, etc.).
+2. **Generate Output:** Run the converter on `Test/teste.mid` to produce a new MusicXML output (`tests/unit/batch_output/Test.musicxml`).
+3. **Compare Output:** Compare the generated output to the reference (`Test/teste.musicxml`).
+4. **Validate:** If the output matches, delete the fix from the checklist and proceed to the next.
+5. **Retry if Needed:** If the output does not match, refine the fix and repeat steps 2-4 until it matches.
+6. **Repeat:** Continue until all fixes are complete and the output matches the reference.
+
+This process ensures each fix is validated before moving on. Document progress by updating the README and removing each step after successful validation.
+
+## 🛠️ Fixes Needed for Exact MusicXML Output Matching
+
+To achieve exact output matching with reference MusicXML files, apply the following fixes in order. After each fix, remove it from this list:
+
+
+Follow this order for implementation and validation.
+
+Um aplicativo web moderno e responsivo para upload, conversão, visualização e reprodução de partituras digitais. Agora inclui conversão direta de arquivos MIDI para MusicXML, download, sincronização de áudio/vídeo, e gerenciamento avançado de biblioteca.
+
+
+## 🚀 Principais Funcionalidades
+
+
+### 🎹 Upload, Conversão e Download de MIDI/MusicXML
+- **Upload de Arquivo MIDI**: Interface intuitiva para arrastar ou selecionar arquivos .mid/.midi
+- **Conversão Automática**: Converte MIDI para MusicXML instantaneamente usando pipeline modular
+- **Download MusicXML**: Baixe o arquivo MusicXML gerado com um clique
+- **Validação**: Saída MusicXML validada contra schema customizado
+- **Exemplo Incluso**: Arquivo MIDI de exemplo para testes
+
+
+### 🎼 Visualização e Reprodução de Partituras
+- **Renderização MusicXML/MIDI**: Visualização de partituras usando VexFlow e OpenSheetMusicDisplay
+- **Tela Cheia**: Interface otimizada para máxima legibilidade
 - **Notação Musical Padrão**: Clave de sol, compassos, notas reais do MIDI
 - **Responsivo**: Adapta-se automaticamente a diferentes tamanhos de tela
 
-### 🎮 Controles de Reprodução Avançados
+
+### 🎮 Controles de Reprodução
 - **Play/Pause/Stop**: Controles básicos de reprodução
-- **Controle de Velocidade**: 0.5x a 2.0x (50% a 200%)
-- **Seleção de Instrumentos**: Piano, Guitar, Violin, Flute
-- **Controle de Volume**: 0% a 100% com função mute
-- **Barra de Progresso**: Navegação interativa na música
-- **Loop**: Reprodução em loop
-- **Painel Colapsível**: Interface limpa e focada
+- **Velocidade e Instrumentos**: Ajuste de tempo e seleção de instrumentos
+- **Volume e Loop**: Controle de volume, mute e reprodução em loop
+- **Barra de Progresso**: Navegação interativa
+
 
 ### 🎬 Sincronização de Áudio/Vídeo
-- **Integração YouTube**: Sincronização com vídeos do YouTube
+- **YouTube Sync**: Sincronize partituras com vídeos do YouTube
 - **Upload de Áudio**: Suporte para arquivos de áudio locais
 - **Timeline Interativa**: Pontos de sincronização arrastáveis
-- **Visualização Dual**: Timeline MIDI e áudio lado a lado
-- **Controles Precisos**: Sincronização frame-perfect
 
-### 📚 Gerenciamento de Partituras
-- **Biblioteca Pessoal**: Sistema completo de gerenciamento
-- **Busca e Filtros**: Pesquisa por nome, filtros por categoria
-- **Favoritos**: Sistema de marcação de partituras favoritas
-- **Estatísticas**: Dashboard com métricas de uso
-- **Histórico**: Rastreamento de última reprodução
-- **Visualizações**: Grid e lista para diferentes preferências
+
+### 📚 Gerenciamento de Biblioteca
+- **Biblioteca Pessoal**: CRUD completo de partituras
+- **Busca, Filtros e Favoritos**: Pesquisa avançada e marcação
+- **Estatísticas e Histórico**: Dashboard de uso e histórico
+
 
 ### 📱 Design Responsivo
 - **Mobile-First**: Otimizado para dispositivos móveis
 - **Touch-Friendly**: Controles adaptados para toque
-- **Breakpoints**: Desktop (≥1024px), Tablet (768-1023px), Mobile (<768px)
-- **Layout Adaptativo**: Interface reorganiza-se automaticamente
+
 
 ## 🛠️ Tecnologias Utilizadas
 
@@ -54,14 +74,17 @@ Um aplicativo web moderno e responsivo para visualização e reprodução de par
 - **Lucide Icons**: Ícones modernos e consistentes
 - **Vite**: Build tool e desenvolvimento
 
-### Áudio e MIDI
+
+### Áudio, MIDI e MusicXML
 - **Tone.js**: Engine de áudio e síntese
 - **@tonejs/midi**: Parser e manipulação de arquivos MIDI
+- **OpenSheetMusicDisplay**: Renderização de MusicXML
 - **VexFlow**: Renderização de notação musical
 
 ### Armazenamento
 - **localStorage**: Persistência de dados local
 - **JSON**: Formato de dados estruturados
+
 
 ## 🚀 Instalação e Execução
 
@@ -100,31 +123,26 @@ npm run preview
 - **Desenvolvimento**: http://localhost:5173
 - **Produção**: Após build, servir pasta `dist/`
 
+
 ## 📖 Guia de Uso
 
-### 1. Upload de Arquivo MIDI
+### 1. Upload, Conversão e Download de MIDI/MusicXML
 1. Acesse a tela inicial
-2. Arraste um arquivo .mid/.midi para a área de drop
-3. Ou clique em "Browse Files" para selecionar
-4. Use "Load Sample MIDI" para testar com arquivo de exemplo
+2. Arraste ou selecione um arquivo MIDI (.mid/.midi)
+3. O arquivo é convertido automaticamente para MusicXML
+4. Clique em "Download MusicXML" para baixar o resultado
+5. Visualize o MusicXML gerado na interface
 
-### 2. Configuração de Sincronização (Opcional)
-1. Insira URL do YouTube (opcional)
-2. Ou faça upload de arquivo de áudio
-3. Configure pontos de sincronização na timeline
-4. Clique em "Continue to Playback"
 
-### 3. Reprodução de Partituras
-1. Use os controles de reprodução na parte inferior
-2. Ajuste velocidade, volume e instrumento conforme necessário
-3. Navegue pela música usando a barra de progresso
-4. Alterne para tela cheia para melhor visualização
+### 2. Sincronização e Reprodução
+1. Configure sincronização com áudio ou vídeo (YouTube)
+2. Ajuste pontos de sincronização na timeline
+3. Use controles de reprodução para tocar, pausar, ajustar velocidade e instrumentos
 
-### 4. Gerenciamento de Partituras
-1. Acesse "My Scores" no menu superior
-2. Visualize suas partituras salvas
-3. Use busca e filtros para encontrar partituras
-4. Marque favoritos e visualize estatísticas
+
+### 3. Gerenciamento de Biblioteca
+1. Acesse "My Scores" para visualizar, buscar, filtrar e favoritar partituras
+2. Veja estatísticas e histórico de uso
 
 ## 🎨 Design System
 
@@ -258,9 +276,13 @@ export default defineConfig({
 3. **Reprodução**: MIDI data → Tone.js → Áudio
 4. **Persistência**: Estado → localStorage → Recuperação
 
+
 ## 🧪 Testes e Qualidade
 
+
 ### Testes Implementados
+- **Conversão MIDI→MusicXML**: Testes unitários e batch para garantir conformidade
+- **Validação MusicXML**: Validação automática contra schema customizado
 - **Responsividade**: Verificação automática de breakpoints
 - **Performance**: Monitor em tempo real de FPS, memória, render time
 - **Funcionalidade**: Testes manuais de todos os fluxos
@@ -272,13 +294,20 @@ export default defineConfig({
 - **Load Time**: <2s (bom), 2-5s (aceitável), >5s (ruim)
 - **Render Time**: <16ms (bom), 16-33ms (aceitável), >33ms (ruim)
 
-## 🔮 Funcionalidades Futuras
+
+## 🔮 Roadmap e Funcionalidades Futuras
+
 
 ### Curto Prazo
-- [ ] Suporte para mais formatos (MusicXML, ABC)
+- [x] Upload e conversão MIDI→MusicXML com download
+- [x] Validação MusicXML
+- [x] Visualização e reprodução de partituras
+- [x] Sincronização com áudio/vídeo
+- [x] Gerenciamento de biblioteca
 - [ ] Exportação de partituras em PDF
 - [ ] Modo escuro/claro
 - [ ] Atalhos de teclado
+
 
 ### Médio Prazo
 - [ ] Colaboração em tempo real
@@ -286,11 +315,13 @@ export default defineConfig({
 - [ ] Transposição automática
 - [ ] Metrônomo integrado
 
+
 ### Longo Prazo
 - [ ] IA para correção de partituras
 - [ ] Reconhecimento de áudio para MIDI
 - [ ] Marketplace de partituras
 - [ ] Aplicativo mobile nativo
+
 
 ## 🤝 Contribuição
 
@@ -346,15 +377,18 @@ src/assets/images/new-image.svg
 src/assets/fonts/new-font.woff2
 ```
 
+
 ## 📄 Licença
 
 Este projeto está licenciado sob a MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
 
 ## 👥 Equipe
 
 - **Desenvolvimento**: Manus AI Agent
 - **Design**: Baseado no projeto SharpBlend E-commerce
 - **Tecnologias**: React, Tone.js, VexFlow, Tailwind CSS
+
 
 ## 📞 Suporte
 
@@ -365,5 +399,6 @@ Para suporte e dúvidas:
 
 ---
 
-**Sheet Music Viewer** - Transformando a experiência de visualização e reprodução de partituras digitais. 🎵
+
+**Midi Stuff for Music** - Plataforma completa para upload, conversão, visualização e gerenciamento de partituras digitais. 🎵
 
