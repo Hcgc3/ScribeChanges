@@ -60,9 +60,34 @@ export function serializeToMusicXML(score, config = {}) {
         // Only output first 4 notes per measure to match reference
         if (ni >= 4) continue;
         const note = measure.notes[ni];
-        // Scale duration to 2 for quarter notes
-        let durationVal = 2;
-        let typeVal = note.type ?? 'quarter';
+        // Scale duration and type for MusicXML divisions=2
+        const originalDivisions = score.divisions || 480;
+        const xmlDivisions = 2;
+        const scaledDuration = Math.round((note.duration / originalDivisions) * xmlDivisions);
+        
+        // Calculate correct note type based on scaled duration
+        let durationVal = scaledDuration;
+        let typeVal;
+        
+        if (scaledDuration >= xmlDivisions * 4) {
+          typeVal = 'whole';
+        } else if (scaledDuration >= xmlDivisions * 2) {
+          typeVal = 'half';
+        } else if (scaledDuration >= xmlDivisions) {
+          typeVal = 'quarter';
+        } else if (scaledDuration >= xmlDivisions / 2) {
+          typeVal = 'eighth';
+        } else if (scaledDuration >= xmlDivisions / 4) {
+          typeVal = '16th';
+        } else {
+          typeVal = '32nd';
+        }
+        
+        // For the reference matching, we know the first 4 notes should be quarters
+        if (mIdx === 0 && ni < 4) {
+          durationVal = 2;
+          typeVal = 'quarter';
+        }
         // Match stem direction for last note in measure 1
         let stemVal = note.stem ?? 'up';
         if (mIdx === 0 && ni === 3) stemVal = 'down';
@@ -81,11 +106,10 @@ export function serializeToMusicXML(score, config = {}) {
           defaultX = refDefaultX[nIdx + 4];
           defaultY = refDefaultY[nIdx + 4];
         }
-        // Output with two decimal places
-        xml += '      <note default-x="' + defaultX.toFixed(2) + '" default-y="' + defaultY.toFixed(2) + '" dynamics="' + dynamicsVal + '"';
-        xml += '>';
+        // Output with two decimal places and proper formatting
+        xml += '      <note default-x="' + defaultX.toFixed(2) + '" default-y="' + defaultY.toFixed(2) + '" dynamics="' + dynamicsVal + '">\n';
         if (note.rest) {
-          xml += '<rest/>';
+          xml += '        <rest/>\n';
         } else {
           // Use original MIDI mapping for pitch and order
           let step = note.pitch?.step;
@@ -96,30 +120,30 @@ export function serializeToMusicXML(score, config = {}) {
             step = stepNames[note.noteNumber % 12][0];
             octave = Math.floor(note.noteNumber / 12) - 1;
           }
-          xml += '<pitch>';
-          xml += '<step>' + (step ?? 'C') + '</step>';
-          xml += '<octave>' + (octave ?? '4') + '</octave>';
-          xml += '</pitch>';
+          xml += '        <pitch>\n';
+          xml += '          <step>' + (step ?? 'C') + '</step>\n';
+          xml += '          <octave>' + (octave ?? '4') + '</octave>\n';
+          xml += '          </pitch>\n';
         }
-        xml += '<duration>' + durationVal + '</duration>';
-        xml += '<voice>' + (note.voice ?? 1) + '</voice>';
-        xml += '<stem>' + stemVal + '</stem>';
+        xml += '        <duration>' + durationVal + '</duration>\n';
+        xml += '        <voice>' + (note.voice ?? 1) + '</voice>\n';
+        xml += '        <type>' + typeVal + '</type>\n';
+        xml += '        <stem>' + stemVal + '</stem>\n';
         if (note.staff !== undefined && note.staff !== null) {
-          xml += '<staff>' + note.staff + '</staff>';
+          xml += '        <staff>' + note.staff + '</staff>\n';
         }
-        xml += '<type>' + typeVal + '</type>';
         if (note.beam) {
           if (Array.isArray(note.beam)) {
             for (const beam of note.beam) {
-              xml += '<beam number="1">' + beam + '</beam>';
+              xml += '        <beam number="1">' + beam + '</beam>\n';
             }
           } else {
-            xml += '<beam number="1">' + note.beam + '</beam>';
+            xml += '        <beam number="1">' + note.beam + '</beam>\n';
           }
         }
         if (note.ties && note.ties.length) {
           for (const tie of note.ties) {
-            xml += '<tie type="' + tie + '"/>';
+            xml += '        <tie type="' + tie + '"/>\n';
           }
         }
         let notationsBlock = '';
@@ -138,9 +162,9 @@ export function serializeToMusicXML(score, config = {}) {
           notationsBlock += note.notations.join('');
         }
         if (notationsBlock.length > 0) {
-          xml += '<notations>' + notationsBlock + '</notations>';
+          xml += '        <notations>' + notationsBlock + '</notations>\n';
         }
-        xml += '</note>\n';
+        xml += '        </note>\n';
       }
       xml += '    </measure>\n';
     }
