@@ -2,7 +2,7 @@
 import { parseMidi } from '../../src/converter/midiParser.js';
 
 describe('midiParser', () => {
-  it('should parse MIDI and return events array', () => {
+  it('should parse MIDI and return events array', async () => {
     // Simulate a minimal MIDI input (mock)
     const midiData = {
       tracks: [
@@ -10,13 +10,13 @@ describe('midiParser', () => {
       ],
       header: { ticksPerBeat: 480 }
     };
-    const result = parseMidi(midiData);
+    const result = await parseMidi(midiData);
     expect(Array.isArray(result.events)).toBe(true);
     expect(result.events.length).toBeGreaterThan(0);
     expect(result.events[0].type).toBe('note');
   });
 
-  it('should detect phrases and chords in MIDI input', () => {
+  it('should detect phrases and chords in MIDI input', async () => {
     const midiData = {
       tracks: [
         {
@@ -31,7 +31,7 @@ describe('midiParser', () => {
       ],
       header: { ppq: 480 }
     };
-    const result = parseMidi(midiData);
+    const result = await parseMidi(midiData);
     // Phrase detection: should find 2 phrases
     expect(Array.isArray(result.phrases)).toBe(true);
     expect(result.phrases.length).toBe(2);
