@@ -11,13 +11,32 @@ try {
   Midi = pkg.Midi;
 }
 
+// Helper function to safely extract MIDI note number from note object
+function getMidiNoteNumber(note) {
+  // Support both common field names: midi (tonejs/midi) and noteNumber (alternative format)
+  if (typeof note.midi === 'number') {
+    return note.midi;
+  }
+  if (typeof note.noteNumber === 'number') {
+    return note.noteNumber;
+  }
+  // Return null if no valid MIDI number found
+  return null;
+}
+
 function midiNoteToXmlPitch(midi) {
+  // Validate MIDI number
+  if (typeof midi !== 'number' || midi < 0 || midi > 127) {
+    console.warn(`Invalid MIDI note number: ${midi}. Using default middle C (60).`);
+    midi = 60; // Default to middle C if invalid
+  }
+  
   const stepNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   const step = stepNames[midi % 12];
   const octave = Math.floor(midi / 12) - 1;
   let alter = '';
   let baseStep = step;
-  if (step.includes('#')) {
+  if (step && step.includes('#')) {
     baseStep = step[0];
     alter = '<alter>1</alter>';
   }
@@ -53,7 +72,33 @@ export function midiToMusicXML(midi) {
   if (!track || !track.notes || track.notes.length === 0) {
     return '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<score-partwise version="3.1">\n  <part-list>\n    <score-part id=\"P1\"><part-name>Music</part-name></score-part>\n  </part-list>\n  <part id=\"P1\">\n    <measure number=\"1\">\n      <attributes>\n        <divisions>480</divisions>\n        <key><fifths>0</fifths></key>\n        <time><beats>4</beats><beat-type>4</beat-type></time>\n        <clef><sign>G</sign><line>2</line></clef>\n      </attributes>\n      <note><rest/><duration>1920</duration><type>whole</type></note>\n    </measure>\n  </part>\n</score-partwise>';
   }
-  const notes = track.notes;
+  
+  console.log(`Processing track with ${track.notes.length} notes`);
+  
+  // Filter and validate notes, collecting debug information
+  const validNotes = [];
+  let invalidNoteCount = 0;
+  
+  for (const note of track.notes) {
+    const midiNumber = getMidiNoteNumber(note);
+    if (midiNumber !== null) {
+      // Don't copy the note - just use it directly and store the midiNumber separately
+      validNotes.push(note);
+    } else {
+      invalidNoteCount++;
+      console.warn('Skipping note with invalid/missing MIDI number:', note);
+    }
+  }
+  
+  console.log(`Found ${validNotes.length} valid notes, ${invalidNoteCount} invalid notes`);
+  
+  // If no valid notes, return a score with a default note
+  if (validNotes.length === 0) {
+    console.warn('No valid notes found. Adding default middle C note.');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<score-partwise version="3.1">\n  <part-list>\n    <score-part id="P1"><part-name>Music</part-name></score-part>\n  </part-list>\n  <part id="P1">\n    <measure number="1">\n      <attributes>\n        <divisions>480</divisions>\n        <key><fifths>0</fifths></key>\n        <time><beats>4</beats><beat-type>4</beat-type></time>\n        <clef><sign>G</sign><line>2</line></clef>\n      </attributes>\n      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><type>quarter</type></note>\n      <note><rest/><duration>1440</duration><type>half</type><dot/></note>\n    </measure>\n  </part>\n</score-partwise>';
+  }
+  
+  const notes = validNotes;
   // Build a granular event timeline: all note on/off, plus all unique note start/end times
   const times = new Set();
   for (const note of notes) {
@@ -116,7 +161,7 @@ export function midiToMusicXML(midi) {
         tieTag += tieStart ? '<tie type=\"start\"/>' : '';
         tieTag += tieStop ? '<tie type=\"stop\"/>' : '';
       }
-      xml += `\n      <note>${midiNoteToXmlPitch(note.midi)}<duration>${divs}</duration><type>${type}</type>${dot ? '<dot/>' : ''}${tieTag}`;
+      xml += `\n      <note>${midiNoteToXmlPitch(getMidiNoteNumber(note))}<duration>${divs}</duration><type>${type}</type>${dot ? '<dot/>' : ''}${tieTag}`;
       if (tieStart || tieStop) {
         xml += '<notations>';
         if (tieStart) xml += '<tied type=\"start\"/>';
@@ -141,8 +186,13 @@ export function midiToMusicXML(midi) {
   }
   if (!outputNote) {
     // Fallback: output a placeholder note if no notes were output
+    console.warn('No notes were output during conversion. Adding fallback middle C note.');
     xml += `\n      <note>${midiNoteToXmlPitch(60)}<duration>${divisions}</duration><type>quarter</type></note>`;
   }
   xml += '\n    </measure>\n  </part>\n</score-partwise>';
+  
+  console.log('MusicXML conversion completed successfully');
+  console.log(`Generated XML length: ${xml.length} characters`);
+  
   return xml;
 }
