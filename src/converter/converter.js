@@ -15,9 +15,9 @@ export async function midiBufferToMusicXML(buffer) {
 
     // 1. Parse MIDI
     t0 = performance.now();
-    const { divisions, events } = (() => {
+    const { divisions, events } = await (async () => {
       try {
-        const result = parseMidi(buffer);
+        const result = await parseMidi(buffer);
         logCollector.log('[Converter] MIDI parsed:', result);
         return result;
       } catch (err) {
