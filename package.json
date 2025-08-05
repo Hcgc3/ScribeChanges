@@ -1,0 +1,20 @@
+{
+  "name": "scribe-changes-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:web": "pnpm --filter @scribe-changes/web dev",
+    "build:web": "pnpm --filter @scribe-changes/web build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "pnpm": "^8.0.0",
+    "eslint": "^9.7.0",
+    "prettier": "^3.0.0",
+    "jest": "^29.0.0"
+  },
+  "packageManager": "pnpm@8.0.0"
+}
