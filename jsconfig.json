@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@ui/*": ["packages/ui/src/*"],
+      "@utils/*": ["packages/utils/src/*"],
+      "@web/*": ["apps/web/src/*"]
+    }
+  }
+}
