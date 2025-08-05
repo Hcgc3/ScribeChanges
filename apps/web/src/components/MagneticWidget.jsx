@@ -9,6 +9,7 @@ import {
   Maximize2,
   GripVertical
 } from 'lucide-react';
+import PropTypes from 'prop-types';
 
 /**
  * Componente base para widgets magnéticos que podem ser fixados aos cantos
@@ -43,7 +44,9 @@ const MagneticWidget = ({
 }) => {
   console.log('🎯 [MagneticWidget] Rendering:', { title, position: propsPosition || defaultPosition });
   
-  const [position, setPosition] = useState(propsPosition || "bottom-center");
+  const [position, setPosition] = useState(
+    typeof propsPosition === 'string' ? propsPosition : defaultPosition
+  );
   const [isPinned, setIsPinned] = useState(defaultPinned);
   const [isMinimized, setIsMinimized] = useState(defaultMinimized);
   const [isDragging, setIsDragging] = useState(false);
@@ -563,6 +566,21 @@ const MagneticWidget = ({
       )}
     </Card>
   );
+};
+
+MagneticWidget.propTypes = {
+  propsPosition: PropTypes.string,
+  title: PropTypes.string,
+  icon: PropTypes.elementType,
+  showHeader: PropTypes.bool,
+  defaultPosition: PropTypes.string,
+  defaultPinned: PropTypes.bool,
+  defaultMinimized: PropTypes.bool,
+  onPositionChange: PropTypes.func,
+  onPinnedChange: PropTypes.func,
+  onMinimizedChange: PropTypes.func,
+  magneticZones: PropTypes.number,
+  className: PropTypes.string,
 };
 
 export default MagneticWidget;

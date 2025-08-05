@@ -40,6 +40,8 @@ const SettingsPanel = ({
   settings = {}, 
   onSettingsChange 
 }) => {
+  console.log('SettingsPanel props:', { isOpen });
+
   // Estados locais para configurações
   const [localSettings, setLocalSettings] = useState({
     // Configurações de Audio
@@ -124,13 +126,13 @@ const SettingsPanel = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent aria-describedby="settings-description" className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
             Configurações
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription id="settings-description">
             Personalize a aplicação de partitura musical conforme suas preferências.
           </DialogDescription>
         </DialogHeader>
@@ -338,7 +340,7 @@ const SettingsPanel = ({
               <Separator />
 
               <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
+                <div className="space-y-0.5"></div>
                   <Label>Atalhos de Teclado</Label>
                   <p className="text-sm text-muted-foreground">
                     Ativar shortcuts para ações comuns
@@ -422,28 +424,6 @@ const SettingsPanel = ({
             </div>
           </TabsContent>
         </Tabs>
-
-        {/* Footer com botões de ação */}
-        <div className="flex justify-between pt-4">
-          <Button 
-            variant="outline" 
-            onClick={handleResetSettings}
-            className="flex items-center gap-2"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Restaurar Padrões
-          </Button>
-          
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveSettings} className="flex items-center gap-2">
-              <Save className="h-4 w-4" />
-              Salvar Configurações
-            </Button>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
