@@ -1,0 +1,286 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Performance optimizations for draggable widgets */
+@layer components {
+  .magnetic-widget {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    transform-style: preserve-3d;
+    z-index: 5; /* Muito baixo para não interferir com dialogs */
+  }
+  
+  .magnetic-widget.is-dragging {
+    will-change: transform, left, top;
+    transition: none !important;
+    transform: translateZ(0);
+    pointer-events: none;
+    z-index: 10; /* Durante o drag, ainda baixo comparado aos dialogs */
+  }
+  
+  .magnetic-widget.is-dragging * {
+    pointer-events: none;
+  }
+  
+  .magnetic-widget:not(.is-dragging) {
+    will-change: auto;
+  }
+
+  /* Garantir que dialogs funcionem corretamente */
+  [data-slot="dialog-overlay"] {
+    background: rgba(0, 0, 0, 0.5) !important;
+    z-index: 50 !important;
+  }
+  
+  [data-slot="dialog-content"] {
+    background: white !important;
+    z-index: 51 !important;
+  }
+
+  /* Garantir que selects dentro de dialogs funcionem */
+  [data-slot="select-content"] {
+    z-index: 100 !important;
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  }
+
+  /* Dark mode para select content */
+  .dark [data-slot="select-content"] {
+    background: #1f2937 !important;
+    border-color: #374151 !important;
+    color: white !important;
+  }
+
+  /* Dark mode para widgets magnéticos */
+  .dark .magnetic-widget {
+    background: #374151 !important;
+    border-color: #4b5563 !important;
+    color: white !important;
+  }
+
+  .dark .magnetic-widget .widget-controls button {
+    color: #d1d5db !important;
+  }
+
+  .dark .magnetic-widget .widget-controls button:hover {
+    background: #4b5563 !important;
+  }
+
+  /* Expanded widget styles */
+  .expanded-widget {
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .expanded-widget .widget-content {
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  .compact-widget {
+    max-width: 280px;
+    max-height: 400px;
+  }
+
+  /* Scrollbar styles for expanded widgets */
+  .expanded-widget .widget-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .expanded-widget .widget-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  .expanded-widget .widget-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+  }
+
+  .expanded-widget .widget-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+}
+
+/* COMPREHENSIVE DROPDOWN TRANSPARENCY FIXES */
+/* Select Components */
+[data-slot="select-content"] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 100 !important;
+}
+
+/* Popover Components */
+[data-slot="popover-content"] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 100 !important;
+}
+
+/* Dropdown Menu Components */
+[data-slot="dropdown-menu-content"] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 100 !important;
+}
+
+/* Context Menu Components */
+[data-slot="context-menu-content"] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 100 !important;
+}
+
+/* Navigation Menu Components */
+[data-slot="navigation-menu-content"] {
+  background: white !important;
+  border: 1px solid #e5e7eb !important;
+  z-index: 100 !important;
+}
+
+/* Tooltip Components */
+[data-slot="tooltip-content"] {
+  background: rgba(0, 0, 0, 0.9) !important;
+  color: white !important;
+  border: none !important;
+  z-index: 100 !important;
+}
+
+/* Dark mode dropdown styles */
+.dark [data-slot="select-content"] {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark [data-slot="popover-content"] {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark [data-slot="dropdown-menu-content"] {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark [data-slot="context-menu-content"] {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark [data-slot="navigation-menu-content"] {
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark [data-slot="tooltip-content"] {
+  background: rgba(0, 0, 0, 0.95) !important;
+  color: #f9fafb !important;
+}
+
+/* Widgets Panel specific styles */
+.widgets-panel-content {
+  pointer-events: auto !important;
+}
+
+.widgets-panel-content * {
+  pointer-events: auto !important;
+}
+
+/* Widget box hover effects */
+.widgets-panel-content .widget-box {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widgets-panel-content .widget-box:hover {
+  transform: translateY(-1px);
+}
+
+.widgets-panel-content .widget-box:active {
+  transform: translateY(0);
+}
+
+/* Compact widget styles for tight fitting */
+.compact-widget {
+  width: fit-content !important;
+}
+
+.compact-widget .widget-content {
+  padding: 0.25rem !important;
+}
+
+.compact-widget .widget-content > div {
+  margin: 0 !important;
+}
+
+/* Remove extra spacing from widget buttons */
+.compact-widget .space-y-0 > * + * {
+  margin-top: 0 !important;
+}
+
+.compact-widget .gap-1 {
+  gap: 0.25rem !important;
+}

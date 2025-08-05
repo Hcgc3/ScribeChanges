@@ -1,0 +1,1 @@
+Lê o docs/development/CUSTOM_PROMPT.md e o copilot_prompts_repo folder pois tem informações que te poderâo ajudar a  seguir boas condutas e diretrizes para trabalhar nesta aplicação de partitura musical e descobre porque é que o metade dos elementos não aparecem visualmente na página. 

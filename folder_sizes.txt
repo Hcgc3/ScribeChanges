@@ -1,0 +1,10 @@
+1.7M	./dist
+186M	./node_modules
+124K	./copilot_prompts_repo
+156K	./docs
+ 16K	./public
+ 84K	./.git
+8.0K	./.vscode
+ 20K	./backup_old_files
+740K	./src
+189M	.

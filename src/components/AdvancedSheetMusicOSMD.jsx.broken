@@ -1,0 +1,500 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+// import OSMNavigationControls from './OSMNavigationControls.jsx';
+// import SelectionTool from './SelectionTool.jsx';
+
+/**
+ * Configurações avançadas de renderização com suporte OSM - MODO DEBUG
+ */
+const createAdvancedVisualSettings = (customSettings = {}) => ({
+  // Configurações básicas que funcionam (igual ao SheetMusicOSMD)
+  autoResize: true,
+  backend: 'svg',
+  renderSingleHorizontalStaffline: false,
+  
+  // Layout básico em vez de 'Endless' 
+  pageFormat: 'A4_P',
+  pageTopMargin: 20,
+  pageBottomMargin: 15,
+  pageLeftMargin: 15,
+  pageRightMargin: 10,
+  
+  // Espaçamento básico
+  spacingBetweenNotes: 1.0,
+  spacingBetweenTextLines: 0.35,
+  spacingBetweenSystems: 7.0,
+  spacingBetweenStaves: 6.0,
+  
+  // Configurações de compasso básicas
+  minimumMeasureWidth: 80,
+  maximumMeasureWidth: 200,
+  measureNumberLabelHeight: 2.0,
+  
+  // Tipografia básica
+  defaultFontFamily: 'Times New Roman, serif',
+  defaultFontSize: 10.5,
+  titleFontSize: 16,
+  subtitleFontSize: 12,
+  composerFontSize: 10,
+  
+  // Elementos visuais básicos
+  drawTitle: true,
+  drawSubtitle: true,
+  drawComposer: true,
+  drawLyricist: true,
+  drawPartNames: true,
+  drawMeasureNumbers: true,
+  drawCredits: false,
+  drawMetronomeMarks: true,
+  drawTimeSignatures: true,
+  drawKeySignatures: true,
+  drawFingerings: true,
+  
+  // Configurações básicas
+  compactMode: false,
+  pageBackgroundColor: '#FFFFFF',
+  systemLeftMargin: 10,
+  systemRightMargin: 5,
+  systemTopMargin: 8,
+  systemBottomMargin: 8,
+  
+  // Sobrescrever com configurações customizadas
+  ...customSettings
+});
+
+/**
+ * Componente avançado SheetMusicOSMD com navegação OSM e seleção
+ */
+const AdvancedSheetMusicOSMD = ({ 
+  musicXML, 
+  currentTime = 0, 
+  onCursorNote,
+  customSettings = {},
+  enableAdvancedSpacing = true,
+  zoomLevel = 1.0,
+  onLayoutOptimized,
+  onOSMDReady,
+  onSelectionChange,
+  enableSelection = true,
+  enableOSMNavigation = true
+}) => {
+  const containerRef = useRef(null);
+  const osmdRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Estados de navegação OSM
+  const [isPanning, setIsPanning] = useState(false);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [viewportTransform, setViewportTransform] = useState({ 
+    scale: 1.0, 
+    translateX: 0, 
+    translateY: 0 
+  });
+  
+  // Estados de seleção
+  const [selectionActive, setSelectionActive] = useState(false);
+  const [selectionArea, setSelectionArea] = useState({ 
+    x: 0, y: 0, width: 0, height: 0 
+  });
+  const [selectedMeasures, setSelectedMeasures] = useState([]);
+  const [isSelecting, setIsSelecting] = useState(false);
+
+  // Configurações otimizadas de OSMD
+  const osmdOptions = React.useMemo(() => 
+    createAdvancedVisualSettings(customSettings), [customSettings]);
+
+  /**
+   * Inicializa e carrega OSMD
+   */
+  useEffect(() => {
+    if (!musicXML || !containerRef.current || isInitialized) return;
+    
+    setIsLoading(true);
+    setError(null);
+
+    const initializeOSMD = async () => {
+      try {
+        // Limpar container anterior
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
+        }
+
+        // Criar nova instância OSMD
+        osmdRef.current = new OpenSheetMusicDisplay(containerRef.current, osmdOptions);
+
+        // Carregar e renderizar MusicXML
+        await osmdRef.current.load(musicXML);
+        await osmdRef.current.render();
+        
+        // Mostrar cursor
+        if (osmdRef.current.cursor) {
+          osmdRef.current.cursor.show();
+        }
+
+        // Aplicar zoom inicial
+        if (zoomLevel !== 1.0) {
+          osmdRef.current.zoom = zoomLevel;
+          setViewportTransform(prev => ({ ...prev, scale: zoomLevel }));
+        }
+
+        // Configurar eventos de seleção
+        if (enableSelection) {
+          // setupSelectionEvents(); // COMENTADO PARA DEBUG
+        }
+
+        // Callback de layout otimizado
+        if (onLayoutOptimized) {
+          const layoutData = {
+            measures: osmdRef.current.Sheet?.SourceMeasures?.length || 0,
+            systems: osmdRef.current.GraphicSheet?.MusicSystems?.length || 0,
+            pages: osmdRef.current.GraphicSheet?.MusicPages?.length || 1
+          };
+          onLayoutOptimized(layoutData);
+        }
+
+        // Callback quando OSMD está pronto
+        if (onOSMDReady) {
+          onOSMDReady(osmdRef.current);
+        }
+
+        setIsInitialized(true);
+        setIsLoading(false);
+        console.log('OSMD avançado inicializado com sucesso');
+      } catch (err) {
+        console.error('Erro ao carregar MusicXML:', err);
+        setError(err.message);
+        setIsLoading(false);
+      }
+    };
+
+    initializeOSMD();
+  }, [musicXML]);
+
+  /**
+   * Configura eventos de seleção
+   */
+  const setupSelectionEvents = useCallback(() => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+    let startPos = { x: 0, y: 0 };
+
+    const handleMouseDown = (e) => {
+      if (!isPanning && enableSelection) {
+        setIsSelecting(true);
+        const rect = container.getBoundingClientRect();
+        startPos = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+        setSelectionArea({ x: startPos.x, y: startPos.y, width: 0, height: 0 });
+      }
+    };
+
+    const handleMouseMove = (e) => {
+      if (isSelecting && !isPanning) {
+        const rect = container.getBoundingClientRect();
+        const currentPos = {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+        
+        const width = Math.abs(currentPos.x - startPos.x);
+        const height = Math.abs(currentPos.y - startPos.y);
+        const x = Math.min(startPos.x, currentPos.x);
+        const y = Math.min(startPos.y, currentPos.y);
+        
+        setSelectionArea({ x, y, width, height });
+      }
+    };
+
+    const handleMouseUp = (e) => {
+      if (isSelecting) {
+        setIsSelecting(false);
+        
+        // Verificar se a seleção é válida (área mínima)
+        if (selectionArea.width > 20 && selectionArea.height > 20) {
+          setSelectionActive(true);
+          
+          // Simular detecção de compassos selecionados
+          const measures = detectSelectedMeasures(selectionArea);
+          setSelectedMeasures(measures);
+          
+          if (onSelectionChange) {
+            onSelectionChange({ area: selectionArea, measures });
+          }
+        } else {
+          setSelectionArea({ x: 0, y: 0, width: 0, height: 0 });
+        }
+      }
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    container.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown);
+      container.removeEventListener('mousemove', handleMouseMove);
+      container.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPanning, enableSelection, isSelecting, selectionArea]);
+
+  /**
+   * Detecta compassos selecionados (simulação)
+   */
+  const detectSelectedMeasures = (area) => {
+    // Esta é uma implementação simplificada
+    // Em uma implementação real, seria necessário analisar a posição dos elementos SVG
+    const estimatedMeasures = Math.max(1, Math.floor(area.width / 100));
+    return Array.from({ length: estimatedMeasures }, (_, i) => i + 1);
+  };
+
+  /**
+   * Manipuladores de navegação OSM
+   */
+  const handleZoomIn = useCallback(() => {
+    const newZoom = Math.min(viewportTransform.scale * 1.2, 3.0);
+    if (osmdRef.current) {
+      osmdRef.current.zoom = newZoom;
+      osmdRef.current.render();
+    }
+    setViewportTransform(prev => ({ ...prev, scale: newZoom }));
+  }, [viewportTransform.scale]);
+
+  const handleZoomOut = useCallback(() => {
+    const newZoom = Math.max(viewportTransform.scale * 0.8, 0.3);
+    if (osmdRef.current) {
+      osmdRef.current.zoom = newZoom;
+      osmdRef.current.render();
+    }
+    setViewportTransform(prev => ({ ...prev, scale: newZoom }));
+  }, [viewportTransform.scale]);
+
+  const handlePan = useCallback((panData) => {
+    if (panData.toggle !== undefined) {
+      setIsPanning(!isPanning);
+      return;
+    }
+    
+    if (panData.deltaX !== undefined && panData.deltaY !== undefined) {
+      setPanOffset({ x: panData.deltaX, y: panData.deltaY });
+      setViewportTransform(prev => ({
+        ...prev,
+        translateX: prev.translateX + panData.deltaX,
+        translateY: prev.translateY + panData.deltaY
+      }));
+    }
+  }, [isPanning]);
+
+  const handleReset = useCallback(() => {
+    setViewportTransform({ scale: 1.0, translateX: 0, translateY: 0 });
+    setPanOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+    
+    if (osmdRef.current) {
+      osmdRef.current.zoom = 1.0;
+      osmdRef.current.render();
+    }
+  }, []);
+
+  const handleFullscreen = useCallback(() => {
+    if (containerRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        containerRef.current.requestFullscreen();
+      }
+    }
+  }, []);
+
+  /**
+   * Manipuladores de seleção
+   */
+  const handleSelectionResize = useCallback((resizeData) => {
+    // Implementar redimensionamento da seleção
+    console.log('Redimensionar seleção:', resizeData);
+  }, []);
+
+  const handleSelectionMove = useCallback((moveData) => {
+    setSelectionArea(prev => ({
+      ...prev,
+      x: moveData.x,
+      y: moveData.y
+    }));
+  }, []);
+
+  const handleSelectionClose = useCallback(() => {
+    setSelectionActive(false);
+    setSelectionArea({ x: 0, y: 0, width: 0, height: 0 });
+    setSelectedMeasures([]);
+  }, []);
+
+  const handleSelectionAction = useCallback((action) => {
+    console.log('Ação de seleção:', action, selectedMeasures);
+    
+    switch (action) {
+      case 'play':
+        // Implementar reprodução da seleção
+        break;
+      case 'edit':
+        // Implementar edição da seleção
+        break;
+      case 'copy':
+        // Implementar cópia da seleção
+        break;
+      case 'cut':
+        // Implementar corte da seleção
+        break;
+      default:
+        break;
+    }
+  }, [selectedMeasures]);
+
+  /**
+   * Atualiza zoom quando necessário
+   */
+  useEffect(() => {
+    if (osmdRef.current && isInitialized && zoomLevel > 0 && zoomLevel !== viewportTransform.scale) {
+      try {
+        osmdRef.current.zoom = zoomLevel;
+        osmdRef.current.render();
+        setViewportTransform(prev => ({ ...prev, scale: zoomLevel }));
+      } catch (error) {
+        console.warn('Erro ao aplicar zoom:', error);
+      }
+    }
+  }, [zoomLevel, isInitialized, viewportTransform.scale]);
+
+  /**
+   * Atualiza posição do cursor baseado no tempo atual
+   */
+  useEffect(() => {
+    if (!osmdRef.current || !osmdRef.current.cursor || !isInitialized || currentTime < 0) return;
+
+    try {
+      const cursor = osmdRef.current.cursor;
+      
+      // Resetar cursor
+      cursor.reset();
+      
+      // Simular movimento do cursor baseado no tempo
+      const totalSteps = Math.floor(currentTime * 2); // 2 passos por segundo
+      
+      for (let i = 0; i < totalSteps && !cursor.iterator.endReached; i++) {
+        cursor.next();
+      }
+      
+      cursor.show();
+      
+      // Callback com informações da nota atual
+      if (onCursorNote) {
+        const notes = cursor.NotesUnderCursor();
+        if (notes && notes.length > 0) {
+          onCursorNote({
+            note: notes[0],
+            timestamp: currentTime
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Erro ao atualizar cursor:', error);
+    }
+  }, [currentTime, isInitialized, onCursorNote]);
+
+  // Cleanup ao desmontar
+  useEffect(() => {
+    return () => {
+      if (osmdRef.current) {
+        osmdRef.current = null;
+      }
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div className="w-full h-full bg-gray-50 flex items-center justify-center flex-col p-5">
+        <div className="text-red-600 text-base mb-2">
+          Erro ao carregar partitura
+        </div>
+        <div className="text-gray-600 text-sm text-center">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  const containerStyle = {
+    transform: `translate(${viewportTransform.translateX}px, ${viewportTransform.translateY}px)`,
+    cursor: isPanning ? 'grab' : 'default',
+    transition: isPanning ? 'none' : 'transform 0.2s ease'
+  };
+
+  return (
+    <div className="w-full h-full bg-white relative overflow-hidden">
+      {isLoading && (
+        <div className="absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center z-10">
+          <div className="text-blue-600 text-base flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
+            Carregando partitura avançada...
+          </div>
+        </div>
+      )}
+      
+      {/* Container da partitura com transformações */}
+      <div 
+        ref={containerRef} 
+        className="w-full h-full min-h-96 relative"
+        style={containerStyle}
+      />
+
+      {/* Controles de navegação OSM - COMENTADO PARA DEBUG */}
+      {/* {enableOSMNavigation && isInitialized && (
+        <OSMNavigationControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onPan={handlePan}
+          onReset={handleReset}
+          onFullscreen={handleFullscreen}
+          zoomLevel={viewportTransform.scale}
+          isPanning={isPanning}
+        />
+      )} */}
+
+      {/* Ferramenta de seleção - COMENTADO PARA DEBUG */}
+      {/* {enableSelection && selectionActive && (
+        <SelectionTool
+          isVisible={selectionActive}
+          position={selectionArea}
+          onResize={handleSelectionResize}
+          onMove={handleSelectionMove}
+          onClose={handleSelectionClose}
+          onAction={handleSelectionAction}
+          selectedMeasures={selectedMeasures}
+        />
+      )} */}
+
+      {/* Overlay de seleção durante o arrasto */}
+      {isSelecting && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: selectionArea.x,
+            top: selectionArea.y,
+            width: selectionArea.width,
+            height: selectionArea.height,
+            backgroundColor: 'rgba(255, 215, 0, 0.2)',
+            border: '2px dashed rgba(255, 215, 0, 0.8)',
+            borderRadius: '4px',
+            zIndex: 999
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+export default AdvancedSheetMusicOSMD;
+
