@@ -1,0 +1,12 @@
+/* Tailwind directives (processed by PostCSS) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { overscroll-behavior-y: none; }
+
+/* You can add global layers if needed
+@layer base {}
+@layer components {}
+@layer utilities {}
+*/

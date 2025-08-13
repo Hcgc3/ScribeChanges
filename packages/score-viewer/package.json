@@ -1,0 +1,42 @@
+{
+  "name": "@music-editor/score-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./styles/score.css": "./src/styles/score.css"
+  },
+  "sideEffects": [
+    "./src/styles/score.css"
+  ],
+  "peerDependencies": {
+    "lucide-react": ">=0.300.0",
+    "opensheetmusicdisplay": ">=1.7.0",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "zustand": ">=4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "tsup src/index.js --format esm,cjs --out-dir dist --clean --splitting",
+    "postbuild": "mkdir -p dist && cp -R src/styles dist/styles",
+    "dev": "tsup src/index.js --format esm --watch --out-dir dist",
+    "predev": "mkdir -p dist && cp -R src/styles dist/styles || true",
+    "prepare": "pnpm build"
+  }
+}

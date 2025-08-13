@@ -1,0 +1,535 @@
+/* CSS FINAL CORRIGIDO PARA RESOLVER ERROS OSMD */
+
+/* Container principal */
+.music-sheet-container { 
+  width: 100%; 
+  height: 100%; 
+  position: relative; 
+  overflow: hidden;
+  background: #f5f5f5 !important; /* Force grey background always */
+}
+
+/* Upload and error states should have consistent background */
+.music-sheet-container:has(.upload-area),
+.music-sheet-container:has(.error-area),
+.music-sheet-container:not(:has(.osmd-container svg)) {
+  background: #f5f5f5 !important; /* Ensure grey background when no score loaded */
+}
+
+/* Wrapper do viewport */
+.sheet-viewport-wrapper { 
+  position: relative; 
+  width: 100%; 
+  height: 100%; 
+  min-height: 100vh; 
+  display: flex; 
+  align-items: stretch; 
+  background: #f5f5f5; /* Ensure background consistency */
+}
+
+.sheet-viewport-wrapper.lock-view { 
+  overflow: hidden; 
+}
+
+.sheet-viewport-wrapper .sheet-viewport { 
+  flex: 1 1 auto; 
+}
+
+/* SIMPLIFIED: Viewport with guaranteed dimensions */
+.sheet-viewport { 
+  width: 100%; 
+  height: 100%; 
+  min-height: 100vh; 
+  overflow: hidden; 
+  position: relative; 
+  background: #f5f5f5; /* Default grey background */
+  will-change: transform; 
+  box-sizing: border-box;
+  min-width: 320px;
+}
+
+/* When score is loaded, allow white background to show through */
+.sheet-viewport[data-has-score="true"] {
+  background: transparent;
+}
+
+/* Ensure upload/error states always have grey background */
+.sheet-viewport:not([data-has-score="true"]),
+.sheet-viewport[data-has-score="false"],
+.sheet-viewport.upload-state,
+.sheet-viewport.error-state {
+  background: #f5f5f5 !important;
+}
+
+/* Ensure buttons maintain proper styling */
+.music-sheet-container button {
+  background-color: #fbbf24 !important; /* Yellow background */
+  color: #000 !important; /* Black text */
+  border: 1px solid #f59e0b !important;
+}
+
+.music-sheet-container button:hover {
+  background-color: #f59e0b !important; /* Darker yellow on hover */
+}
+
+/* Vertical Mode (modo vertical) */
+.sheet-viewport.lock-view { 
+  overflow-y: auto; 
+  overflow-x: hidden; 
+  cursor: default; 
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  /* CRÍTICO: Garantir altura fixa para evitar PageHeight: 0 */
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+}
+
+.sheet-viewport.lock-view::-webkit-scrollbar { 
+  display: none;
+}
+
+/* Horizontal Mode (modo horizontal) */
+.sheet-viewport:not(.lock-view) { 
+  overflow-x: auto; 
+  overflow-y: hidden; 
+  cursor: grab;
+  /* Let OSMD determine its own height, just ensure minimum width */
+  min-width: 320px;
+  height: 100%;
+}
+
+.sheet-viewport:not(.lock-view):active {
+  cursor: grabbing;
+}
+
+/* Custom scrollbar externo */
+.custom-scroll-track { 
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 14px; 
+  height: 100%; 
+  background: rgba(0,0,0,0.06); 
+  border-left: 1px solid rgba(0,0,0,0.05); 
+  z-index: 300; 
+  cursor: default; 
+  pointer-events: auto; 
+  user-select: none; 
+}
+
+.sheet-viewport-wrapper.lock-view .custom-scroll-track { 
+  position: absolute; 
+}
+
+.custom-scroll-thumb { 
+  width: calc(100% - 6px); 
+  background: rgba(0,0,0,0.45); 
+  border-radius: 6px; 
+  position: absolute; 
+  top: 0; 
+  left: 3px; 
+  will-change: transform; 
+  transition: background 0.15s; 
+  cursor: grab; 
+  min-height: 30px; 
+}
+
+.custom-scroll-thumb.dragging { 
+  cursor: grabbing; 
+}
+
+.custom-scroll-thumb:hover { 
+  background: rgba(0,0,0,0.6); 
+}
+
+/* FIXED: Sheet content with stable dimensions */
+.sheet-content { 
+  width: 100%; 
+  height: auto; 
+  min-height: 100%; 
+  display: flex; 
+  justify-content: center; 
+  align-items: flex-start; 
+  padding: 2rem 0; 
+  will-change: transform; 
+  box-sizing: border-box;
+  min-width: 100%;
+}
+
+.sheet-content.lock-view { 
+  transform: none !important; 
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+}
+
+/* FIXED: A4 page with consistent dimensions */
+.a4-page { 
+  width: 210mm; 
+  height: auto;
+  min-height: 297mm;
+  box-sizing: border-box; 
+  background: transparent; 
+  margin: 0 auto; 
+  position: relative; 
+  transform-origin: 50% 0; 
+  will-change: transform; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Horizontal Mode: stable horizontal layout */
+.sheet-viewport:not(.lock-view) .a4-page { 
+  width: auto; 
+  min-height: 500px; /* Stable minimum height */
+  height: auto;
+  margin: 0; 
+  padding: 0; 
+  background: transparent; 
+  box-shadow: none; 
+  display: flex; 
+  align-items: flex-start; 
+  flex-direction: row;
+}
+
+/* FIXED: OSMD container with stable sizing to prevent glitches */
+.osmd-container { 
+  width: 100%; 
+  height: auto;
+  position: relative; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  visibility: visible;
+  opacity: 1;
+  /* Prevent layout jumps */
+  min-width: 600px;
+  min-height: 400px;
+}
+
+.osmd-container svg { 
+  max-width: 100%; 
+  height: auto; 
+  display: block;
+  /* Prevent SVG from causing layout shifts */
+  min-width: 200px;
+  min-height: 200px;
+}
+
+/* Vertical Mode (lock-view) - Stable Vertical Layout */
+.sheet-viewport.lock-view .osmd-container { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  width: 100%;
+  height: auto;
+  min-width: 600px;
+  min-height: 400px;
+}
+
+.sheet-viewport.lock-view .osmd-container svg { 
+  background: #fff; 
+  width: 210mm !important; /* Fixed A4 width */
+  max-width: calc(100vw - 64px);
+  min-width: 400px; /* Prevent too small rendering */
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08); 
+  margin: 32px 0; 
+  padding: 12mm;
+  box-sizing: border-box; 
+  border-radius: 2px; 
+}
+
+.sheet-viewport.lock-view .osmd-container svg:first-child { 
+  margin-top: 40px; 
+}
+
+.sheet-viewport.lock-view .osmd-container svg:last-child { 
+  margin-bottom: 40px; 
+}
+
+/* Horizontal Mode (horizontal) - Stable Layout */
+.sheet-viewport:not(.lock-view) .osmd-container { 
+  display: flex; 
+  flex-direction: row; 
+  align-items: flex-start; 
+  gap: 4rem; 
+  padding: 3rem 6rem; 
+  box-sizing: border-box;
+  overflow-x: visible;
+  min-width: max-content;
+  width: auto !important;
+  height: auto;
+  min-height: 500px; /* Stable minimum height */
+}
+
+.sheet-viewport:not(.lock-view) .osmd-container svg { 
+  background: #ffffff; 
+  width: 210mm !important; /* Fixed A4 width */
+  min-width: 400px; /* Prevent too small rendering */
+  max-width: none; 
+  margin: 0 !important; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); 
+  border-radius: 4px; 
+  padding: 12mm;
+  box-sizing: border-box; 
+  flex: 0 0 auto; 
+  position: relative;
+  transform-origin: 0 0;
+}
+
+/* Espaçamento horizontal */
+.sheet-viewport:not(.lock-view) .osmd-container::before,
+.sheet-viewport:not(.lock-view) .osmd-container::after { 
+  content: ''; 
+  display: block; 
+  width: 2rem; 
+  height: 1px; 
+  flex: 0 0 auto; 
+}
+
+.sheet-viewport:not(.lock-view) .a4-page .osmd-container { 
+  width: auto; 
+}
+
+/* Simplified horizontal mode class */
+.osmd-container.page-selection { 
+  display: flex !important; 
+  flex-direction: row !important; 
+  align-items: flex-start; 
+  gap: 4rem; 
+  padding: 3rem 6rem; 
+  box-sizing: border-box;
+  min-width: max-content;
+  min-height: 500px; /* Stable height */
+  height: auto;
+  width: auto;
+}
+
+.osmd-container.page-selection > svg { 
+  background: #fff; 
+  width: 210mm !important; /* Fixed A4 width */
+  min-width: 400px; /* Prevent too small rendering */
+  flex: 0 0 auto; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); 
+  border-radius: 4px; 
+  padding: 12mm;
+  box-sizing: border-box; 
+  margin: 0 !important;
+}
+
+/* Dark theme support */
+.dark .sheet-viewport:not(.lock-view) .osmd-container svg,
+.dark .osmd-container.page-selection > svg { 
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3); 
+}
+
+.dark .sheet-viewport.lock-view .osmd-container svg { 
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3); 
+}
+
+/* Zoom controls */
+.zoom-controls { 
+  position: absolute; 
+  top: 20px; 
+  right: 20px; 
+  z-index: 60; 
+  display: flex; 
+  gap: 8px; 
+  background: white; 
+  border-radius: 8px; 
+  padding: 8px; 
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+  pointer-events: auto;
+}
+
+.zoom-button { 
+  width: 40px; 
+  height: 40px; 
+}
+
+.zoom-level { 
+  display: flex; 
+  align-items: center; 
+  padding: 0 12px; 
+  font-size: 14px; 
+  font-weight: 500; 
+}
+
+/* Esconder elementos desnecessários */
+.score-zoom-layout, 
+.score-zoom-scale { 
+  display: none; 
+}
+
+/* Remover wrappers obsoletos */
+.horizontal-pages-wrapper, 
+.horizontal-pages-wrapper * { 
+  all: unset; 
+}
+
+/* Modo contínuo */
+.sheet-viewport.lock-view .osmd-container.continuous { 
+  flex-direction: column; 
+}
+
+.sheet-viewport.lock-view .osmd-container.continuous svg { 
+  margin: 16px 0; 
+}
+
+/* SIMPLIFIED: Responsive design with stable minimums */
+@media (max-width: 768px) {
+  .sheet-viewport:not(.lock-view) {
+    min-width: 400px; /* Reduced but stable minimum */
+    min-height: 300px;
+    height: auto;
+  }
+  
+  .sheet-viewport:not(.lock-view) .osmd-container {
+    padding: 2rem 1rem; /* Reduced padding for mobile */
+    gap: 2rem;
+    min-width: 400px;
+    min-height: 300px;
+    height: auto;
+  }
+  
+  .sheet-viewport.lock-view .osmd-container svg {
+    max-width: calc(100vw - 32px);
+    min-width: 300px; /* Smaller but stable minimum */
+  }
+  
+  .zoom-controls {
+    top: 10px;
+    right: 10px;
+    padding: 6px;
+    gap: 6px;
+  }
+  
+  .zoom-button {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .osmd-container.page-selection {
+    min-width: 400px;
+    min-height: 300px;
+    height: auto;
+    padding: 2rem 1rem;
+  }
+}
+
+/* Smooth transitions */
+.sheet-content,
+.a4-page,
+.osmd-container {
+  transition: all 0.3s ease-out;
+}
+
+/* Ensure transforms don't break layout */
+.sheet-content[style*="transform"] {
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Improve performance */
+.osmd-container svg {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Loading and error states */
+.music-sheet-container .absolute {
+  position: absolute;
+}
+
+.music-sheet-container .inset-0 {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+/* SIMPLIFIED: Upload page styling (no scroll, centered, keep background) */
+.sheet-viewport.upload-state { 
+  overflow: hidden;
+  background: #f5f5f5 !important;
+}
+
+.sheet-viewport.upload-state.lock-view { 
+  overflow: hidden; 
+}
+
+.sheet-viewport.upload-state .sheet-content { 
+  padding: 0; 
+  min-height: 100%; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
+
+.sheet-viewport.upload-state .a4-page { 
+  width: 100%; 
+  min-height: auto; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
+
+.sheet-viewport.upload-state .osmd-container { 
+  width: 100%; 
+  min-height: auto; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  box-shadow: none; 
+  padding: 0; 
+}
+
+/* FORCE GREY BACKGROUND ON INITIAL UPLOAD PAGE (higher specificity) */
+.music-sheet-container .sheet-viewport.upload-state,
+.music-sheet-container .sheet-viewport.upload-state:not([data-has-score="true"]),
+.music-sheet-container .sheet-viewport.upload-state .upload-overlay {
+  background: #f5f5f5 !important;
+}
+
+.sheet-viewport.upload-state .upload-overlay { 
+  position: absolute; /* full cover */
+  inset: 0; 
+  width: 100%; 
+  height: 100%; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  background: #f5f5f5; /* ensure visible background */
+  z-index: 50; 
+  pointer-events: auto; 
+}
+
+/* DISTINCT BACKGROUND FOR UPLOAD PAGE (override earlier grey) */
+.music-sheet-container.upload-mode .sheet-viewport.upload-state,
+.music-sheet-container.upload-mode .sheet-viewport.upload-state .upload-overlay {
+  background: #242321 !important; /* dark grey instead of black */
+}
+
+/* Force white border for upload panel */
+.upload-overlay .upload-panel, .upload-overlay > .flex.border-2 { 
+  border-color: #ffffff !important; 
+  border-width: 3px !important; /* thicker border */
+  padding: 2.5rem !important; /* enlarge box slightly */
+  border-style: dashed !important; /* ensure dashed kept */
+}
+
+/* Hover effect: turn border/background yellowish */
+.upload-overlay .upload-panel:hover,
+.upload-overlay > .flex.border-2:hover { 
+  border-color: #fbbf24 !important; 
+  background: rgba(251,191,36,0.08) !important; 
+  box-shadow: 0 0 0 2px rgba(251,191,36,0.15), 0 4px 12px rgba(0,0,0,0.25); 
+  transition: border-color .18s ease, background .18s ease, box-shadow .25s ease; 
+  cursor: pointer; 
+}
+
