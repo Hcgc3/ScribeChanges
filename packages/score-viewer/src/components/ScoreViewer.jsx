@@ -1,36 +1,49 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
-import { 
-  Upload, 
-  AlertCircle, 
-  Loader2, 
-  ZoomIn, 
-  ZoomOut, 
-  RotateCcw, 
-  Maximize, 
-  Minimize,
-  ChevronLeft,
-  ChevronRight,
-  Maximize2
+import {
+  Upload,
+  AlertCircle,
+  Loader2,
+  ZoomIn,
+  ZoomOut,
+  MoveHorizontal,
 } from 'lucide-react';
-import { useScoreStore } from '@/lib/stores/score-store';
+import { useScoreStore, getRenderWidthPx, getPaperScale } from '@/lib/stores/score-store';
 import { useZoom } from '../hooks/useZoom';
-import { usePan } from '../hooks/usePan';
-import { useEditMode } from '../hooks/useEditMode';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import '../styles/score.css';
 
+// Give each OSMD page its real size so the browser can skip painting pages
+// that are scrolled out of view (content-visibility: auto in score.css).
+const preparePages = (host) => {
+  host.querySelectorAll(':scope > div').forEach((page) => {
+    const svg = page.querySelector('svg');
+    const w = parseFloat(svg?.getAttribute('width'));
+    const h = parseFloat(svg?.getAttribute('height'));
+    if (!w || !h) return;
+    page.classList.add('score-page');
+    page.style.containIntrinsicSize = `${w}px ${h}px`;
+  });
+};
 
+// Mouse wheels send large discrete steps; trackpad pinch (ctrl+wheel in Chrome)
+// sends small continuous deltas that map to exp(-delta/100).
+const wheelZoomFactor = (e) => {
+  const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+  if (Math.abs(dy) >= 50) return dy > 0 ? 1 / 1.15 : 1.15;
+  return Math.exp(-dy / 100);
+};
 
 const ScoreViewer = () => {
-
-  // Destructure store and compute hasFile/lockView FIRST
   const {
     file,
     loadingState,
     error,
-    viewSettings,
+    lockView: lockViewSetting,
+    freezeMode,
     renderOptions,
+    pageSettings,
     osmdInstance,
     setOSMDInstance,
     setLoadingState,
@@ -38,318 +51,101 @@ const ScoreViewer = () => {
     setMetadata,
     updateViewSettings,
     loadScore,
-  } = useScoreStore();
-
-  // Initialize all refs before any usage
-  const viewportRef = useRef(null);
-  const containerRef = useRef(null);
-  const pageRef = useRef(null);
-  const osmdRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const sheetContentRef = useRef(null);
-  const baseContentHeightRef = useRef(0);
-  const lastMeasuredPagesRef = useRef(0);
-  const zoomValueRef = useRef(1);
-  const baseContentWidthRef = useRef(0); // unscaled total width of content (for horizontal scrollbar)
-  const scrollDragRef = useRef({ startY: 0, startScrollTop: 0, thumbHeight: 0, trackHeight: 0 });
-  const scrollTrackRef = useRef(null);
-  const isDraggingScrollRef = useRef(false);
-  const scrollThumbSnapshotRef = useRef(null); // { totalHeight, clientHeight, thumbPx, trackPx }
+  } = useScoreStore(useShallow((s) => ({
+    file: s.file,
+    loadingState: s.loadingState,
+    error: s.error,
+    lockView: s.viewSettings.lockView,
+    freezeMode: s.viewSettings.freezeMode,
+    renderOptions: s.renderOptions,
+    pageSettings: s.pageSettings,
+    osmdInstance: s.osmdInstance,
+    setOSMDInstance: s.setOSMDInstance,
+    setLoadingState: s.setLoadingState,
+    setError: s.setError,
+    setMetadata: s.setMetadata,
+    updateViewSettings: s.updateViewSettings,
+    loadScore: s.loadScore,
+  })));
 
   const hasFile = !!(file && (
     (typeof File !== 'undefined' && file instanceof File) ||
     (typeof file === 'object' && typeof file.content === 'string' && file.content.length > 0)
   ));
-  const lockView = hasFile ? (viewSettings?.lockView !== false) : false; // disable lock-view on initial upload page
+  // Locked view: no drag-to-pan, the cursor stays a pointer (scrollbars still work)
+  const lockView = hasFile ? lockViewSetting !== false : false;
 
-  // ...existing code...
+  const editModeActive = useScoreStore((s) => s.editMode.isActive);
 
-  // Sum of visible (scaled) parts of pages inside viewport (kept)
-  const getVisiblePagesScaledHeight = useCallback(() => {
-    const vp = viewportRef.current;
-    const cont = containerRef.current;
-    if (!vp || !cont) return 0;
-    const vpRect = vp.getBoundingClientRect();
-    const svgs = cont.querySelectorAll('svg');
-    let visible = 0;
-    svgs.forEach(svg => {
-      const r = svg.getBoundingClientRect();
-      const top = Math.max(r.top, vpRect.top);
-      const bottom = Math.min(r.bottom, vpRect.bottom);
-      if (bottom > top) visible += (bottom - top);
-    });
-    return visible;
-  }, []); // No external dependencies used, so dependency array can be empty
+  const viewportRef = useRef(null);
+  const sizerRef = useRef(null);
+  const stageRef = useRef(null);
+  const hostRef = useRef(null);
+  const zoomLabelRef = useRef(null);
+  const osmdRef = useRef(null);
+  const fileInputRef = useRef(null);
 
-  const updateScrollMetrics = useCallback(() => {
-    const vp = viewportRef.current;
-    if (!vp) return;
-    const currentZoom = zoomValueRef.current || 1;
+  const renderWidth = getRenderWidthPx(pageSettings);
+  const {
+    zoomBy,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    fitToWidth,
+    refresh,
+  } = useZoom({
+    viewportRef,
+    sizerRef,
+    stageRef,
+    labelRef: zoomLabelRef,
+    baseScale: getPaperScale(pageSettings),
+  });
 
-    // Re-measure unscaled base height if not dragging scrollbar
-    if (lockView && !isDraggingScrollRef.current) {
-      try {
-        const container = containerRef.current;
-        const svgs = container?.querySelectorAll('svg');
-        const pageCount = svgs?.length || 0;
-        if (pageCount > 0 && container) {
-          // Get current zoom level
-          const currentZoom = zoomValueRef.current || 1;
-          // Validate zoom value
-          if (currentZoom <= 0 || !isFinite(currentZoom)) {
-            console.warn('Invalid zoom value for measurement:', currentZoom);
-            return;
-          }
-          // Method 1: Measure entire container (includes all margins and gaps)
-          const containerRect = container.getBoundingClientRect();
-          let scaledSpan = containerRect.height;
-          // Method 2: Calculate from first to last page + CSS margins (fallback)
-          if (scaledSpan <= 0) {
-            const firstSvg = svgs[0];
-            const lastSvg = svgs[pageCount - 1];
-            if (firstSvg && lastSvg) {
-              const firstRect = firstSvg.getBoundingClientRect();
-              const lastRect = lastSvg.getBoundingClientRect();
-              // CSS-defined spacing (adjust these values to match your actual CSS)
-              const TOP_MARGIN_PX = 40;
-              const BOTTOM_MARGIN_PX = 40;
-              const PAGE_GAP_PX = 32;
-              // Calculate total gaps between pages
-              const totalGapPx = pageCount > 1 ? PAGE_GAP_PX * (pageCount - 1) : 0;
-              // Page span + margins + gaps
-              const pageSpan = lastRect.bottom - firstRect.top;
-              scaledSpan = pageSpan + TOP_MARGIN_PX + BOTTOM_MARGIN_PX + totalGapPx;
-            }
-          }
-          // Convert to unscaled (logical) height
-          const unscaledSpan = scaledSpan / currentZoom;
-          // Validate measurement
-          if (unscaledSpan > 0 && isFinite(unscaledSpan) && unscaledSpan < 100000) {
-            // Only update if significantly different (avoid micro-updates)
-            const currentBase = baseContentHeightRef.current || 0;
-            const sizeDifference = Math.abs(unscaledSpan - currentBase);
-            const threshold = Math.max(10, currentBase * 0.01); // 1% or 10px minimum
-            if (sizeDifference > threshold || lastMeasuredPagesRef.current !== pageCount) {
-              baseContentHeightRef.current = unscaledSpan;
-              lastMeasuredPagesRef.current = pageCount;
-              // Debug logging (remove in production)
-              console.debug('Content height updated:', {
-                pageCount,
-                scaledSpan: Math.round(scaledSpan),
-                unscaledSpan: Math.round(unscaledSpan),
-                zoom: currentZoom
-              });
-            }
-          } else {
-            console.warn('Invalid measurement result:', {
-              scaledSpan,
-              unscaledSpan,
-              currentZoom,
-              pageCount
-            });
-          }
-        } else if (pageCount === 0) {
-          // No pages - reset measurements
-          baseContentHeightRef.current = 0;
-          lastMeasuredPagesRef.current = 0;
+  // Load score when file and OSMD are available
+  useEffect(() => {
+    if (hasFile && osmdInstance) {
+      (async () => {
+        let musicXmlContent = file;
+        if (file instanceof File) {
+          musicXmlContent = await file.text();
+        } else if (typeof file === 'object' && typeof file.content === 'string') {
+          musicXmlContent = file.content;
         }
-      } catch (error) {
-        console.error('Error measuring content height:', error);
-        // Don't update measurements on error to maintain last known good values
-      }
+        try {
+          await osmdInstance.load(musicXmlContent);
+          await osmdInstance.render();
+          // The file reached the store through loadScore already; just mark it rendered
+          setLoadingState('success');
+        } catch (error) {
+          setError({
+            type: 'file',
+            message: 'Erro ao carregar partitura',
+            details: error.message,
+            timestamp: new Date(),
+            recoverable: true,
+          });
+          setLoadingState('error');
+        }
+      })();
     }
-    const unscaledContentHeight = baseContentHeightRef.current || 0; // logical height (pre-scale)
-    const viewportHeight = vp.clientHeight; // visual height
-    const totalScaledHeight = unscaledContentHeight * currentZoom; // visual content height
-    // Determine if all pages fit entirely (no scroll needed)
-    const allPagesFit = totalScaledHeight <= viewportHeight + 0.5; // epsilon
-    // Max scrollTop in unscaled units so both top and bottom margins are always visible
-    let maxScrollTop = 0;
-    if (!allPagesFit) {
-      // Add margin to both top and bottom
-      const marginUnscaled = BOTTOM_MARGIN_PX / currentZoom;
-      maxScrollTop = unscaledContentHeight - (viewportHeight / currentZoom) + marginUnscaled * 2;
-      if (maxScrollTop < 0) maxScrollTop = 0;
-    }
-    // Clamp scrollTop if exceeding max
-    if (lockView) {
-      if (vp.scrollTop > maxScrollTop) {
-        vp.scrollTop = maxScrollTop;
-      }
-    }
-    // Prepare metrics (keep existing fields; redefine effectiveScrollHeight as totalScaledHeight for thumb calc convenience)
-    const newMetrics = {
-      scrollTop: vp.scrollTop,
-      scrollHeight: vp.scrollHeight, // unscaled (logical)
-      clientHeight: vp.clientHeight,
-      effectiveScrollHeight: totalScaledHeight, // visual total pages height
-    };
-    if (isDraggingScrollRef.current) {
-      setScrollMetrics(prev => ({ ...prev, scrollTop: newMetrics.scrollTop }));
-      return;
-    }
-    setScrollMetrics(prev => {
-      if (Math.abs(prev.scrollTop - newMetrics.scrollTop) > 1 ||
-          Math.abs(prev.scrollHeight - newMetrics.scrollHeight) > 1 ||
-          Math.abs(prev.clientHeight - newMetrics.clientHeight) > 1 ||
-          Math.abs(prev.effectiveScrollHeight - newMetrics.effectiveScrollHeight) > 1) {
-        return newMetrics;
-      }
-      return prev;
-    });
-  }, [lockView, getVisiblePagesScaledHeight, viewportRef, baseContentHeightRef, lastMeasuredPagesRef, zoomValueRef, isDraggingScrollRef, setScrollMetrics, containerRef]);
-  // Ref for unscaled total width of content (for horizontal scrollbar)
-  const baseContentWidthRef = useRef(0);
-
-
-
-
-
-  // Handler for horizontal scrollbar thumb drag
-  const onScrollbarThumbMouseDownHorizontal = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const trackEl = document.querySelector('.custom-scroll-track.horizontal');
-    const vp = viewportRef.current;
-    if (!trackEl || !vp) return;
-
-    const trackRect = trackEl.getBoundingClientRect();
-    const totalScaled = (baseContentWidthRef?.current || 0) * (zoomValueRef.current || 1) || 1;
-    const visibleScaled = scrollMetrics.clientWidth;
-    const ratio = totalScaled > 0 ? visibleScaled / totalScaled : 0;
-    const rawThumbPx = trackRect.width * ratio;
-    const thumbPx = Math.max(30, Math.min(rawThumbPx, trackRect.width));
-    const thumbTravelDistance = Math.max(0, trackRect.width - thumbPx);
-
-    scrollDragRef.current = {
-      startX: e.clientX,
-      startScrollLeft: vp.scrollLeft,
-      thumbWidth: thumbPx,
-      trackWidth: thumbTravelDistance,
-    };
-
-    setIsDraggingScroll(true);
-    isDraggingScrollRef.current = true;
-
-    const onMove = (ev) => {
-      const { startX, startScrollLeft, trackWidth } = scrollDragRef.current;
-      const deltaX = ev.clientX - startX;
-      // Recompute maxScrollLeft dynamically for drag
-      const currentZoom = zoomValueRef.current || 1;
-      const unscaledContentWidth = baseContentWidthRef?.current || 0;
-      const viewportWidth = vp.clientWidth;
-      const totalScaledWidth = unscaledContentWidth * currentZoom;
-      const allPagesFit = totalScaledWidth <= viewportWidth + 0.5;
-      let maxScrollLeft = 0;
-      if (!allPagesFit) {
-        maxScrollLeft = unscaledContentWidth - (viewportWidth / currentZoom);
-        if (maxScrollLeft < 0) maxScrollLeft = 0;
-      }
-
-      const scrollRange = maxScrollLeft;
-      const scrollDelta = (deltaX / (trackWidth || 1)) * (scrollRange || 0);
-      let newScrollLeft = Math.min(Math.max(0, startScrollLeft + scrollDelta), maxScrollLeft);
-      vp.scrollLeft = newScrollLeft;
-      updateScrollMetrics();
-    };
-
-    const onUp = () => {
-      setIsDraggingScroll(false);
-      isDraggingScrollRef.current = false;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp, { once: true });
-  }, [updateScrollMetrics, scrollMetrics.clientWidth, viewportRef, baseContentWidthRef, zoomValueRef, scrollDragRef, setIsDraggingScroll, isDraggingScrollRef]);
-  
-  // ...existing code...
-
-    // Load score when file and OSMD are available
-  useEffect(() => { 
-    if (hasFile && osmdInstance) { 
-      loadScoreFile(file); 
-    }
-  }, [hasFile, file, osmdInstance, loadScoreFile]); // file and osmdInstance added
+  }, [hasFile, file, osmdInstance, setError, setLoadingState]);
 
   // Clean up OSMD when file is removed
   useEffect(() => {
     if (!file && osmdInstance) {
-      console.log('Cleaning up OSMD instance...');
       try {
-        // Clear the container
-        if (containerRef.current) {
-          containerRef.current.innerHTML = '';
+        if (hostRef.current) {
+          hostRef.current.innerHTML = '';
         }
-        // Reset OSMD references
         setOSMDInstance(null);
         osmdRef.current = null;
-        // Reset metadata and view settings
         setMetadata(null);
         updateViewSettings({ totalPages: 1, pageIndex: 0 });
       } catch (err) {
         console.error('Error cleaning up OSMD:', err);
       }
     }
-  }, [file, osmdInstance, setOSMDInstance, setMetadata, updateViewSettings]); // file and osmdInstance added
-
-  // Configurar viewport
-  useEffect(() => {
-    const vp = viewportRef.current;
-    if (!vp) return;
-    
-    if (lockView) {
-      vp.style.overflowY = 'auto';
-      vp.style.overflowX = 'hidden';
-      vp.style.cursor = 'default';
-      vp.style.height = '100vh';
-      vp.style.maxHeight = '100vh';
-      vp.style.minHeight = '100vh';
-    } else {
-      vp.style.overflowY = 'auto';
-      vp.style.overflowX = 'auto';
-      vp.style.cursor = 'grab';
-      vp.style.height = '100%';
-      vp.style.maxHeight = '';
-      vp.style.minHeight = '';
-    }
-    updateScrollMetrics();
-  }, [lockView, updateScrollMetrics]);
-
-  const {
-    zoom,
-    smoothZoom,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    zoomTo,
-  } = useZoom();
-  zoomValueRef.current = zoom;
-
-  const {
-    panState,
-    panTo,
-    centerContent,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleTouchStart,
-    handleTouchMove,
-    handleTouchEnd,
-  } = usePan();
-
-  const {
-    editMode,
-    distanceVisualization,
-    startDrag,
-    updateDrag,
-    endDrag,
-  } = useEditMode();
-
-  const [dragOver, setDragOver] = useState(false);
-  const [isDraggingScroll, setIsDraggingScroll] = useState(false);
+  }, [file, osmdInstance, setOSMDInstance, setMetadata, updateViewSettings]);
 
   const loadingMessages = {
     loading: 'A carregar partitura...',
@@ -362,12 +158,9 @@ const ScoreViewer = () => {
 
   // Initialize OSMD only when we have a file to load
   useEffect(() => {
-    if (containerRef.current && !osmdInstance && !osmdRef.current && file) {
-      console.log('Initializing OSMD for file...');
-      
+    if (hostRef.current && !osmdInstance && !osmdRef.current && file) {
       try {
-        ensureContainerSize();
-        const osmd = new OpenSheetMusicDisplay(containerRef.current, {
+        const osmd = new OpenSheetMusicDisplay(hostRef.current, {
           ...renderOptions,
           backend: 'svg',
           autoResize: false,
@@ -376,7 +169,6 @@ const ScoreViewer = () => {
         });
         setOSMDInstance(osmd);
         osmdRef.current = osmd;
-        console.log('OSMD initialized successfully');
       } catch (err) {
         console.error('Error initializing OSMD:', err);
         setError({
@@ -388,235 +180,157 @@ const ScoreViewer = () => {
         });
       }
     }
-  }, [renderOptions, setOSMDInstance, setError, file, ensureContainerSize]);
+  }, [renderOptions, osmdInstance, setOSMDInstance, setError, file]);
 
-  // Resize handling with proper throttling
+  // The page layout no longer depends on the window size, so a resize only needs the
+  // scroll area re-measured. Every OSMD render (load, page settings) resizes the stage.
   useEffect(() => {
-    if (!osmdInstance) return;
-    
-    let timeoutId;
-    let isRendering = false;
-    let lastRenderTime = 0;
-    const minRenderInterval = 1000; // Increased to 1 second to prevent WebGL spam
-    
-    const onResize = () => {
-      if (isRendering) return;
-      
-      const now = Date.now();
-      if (now - lastRenderTime < minRenderInterval) {
-        return;
-      }
-      
-      if (timeoutId) clearTimeout(timeoutId);
-      
-      timeoutId = setTimeout(async () => {
-        if (isRendering || !osmdInstance) return;
-        isRendering = true;
-        lastRenderTime = Date.now();
-        
-        try { 
-          if (ensureContainerSize()) {
-            await osmdInstance.render(); 
-            updateScrollMetrics();
-          }
-        } catch (error) {
-          console.warn('Resize render error:', error);
-        } finally {
-          isRendering = false;
-        }
-      }, 500);
-    };
-    
-    window.addEventListener('resize', onResize);
-    
-    return () => { 
-      clearTimeout(timeoutId); 
-      window.removeEventListener('resize', onResize); 
-    };
-  }, [osmdInstance, updateScrollMetrics, ensureContainerSize]);
+    const stage = stageRef.current;
+    if (!hasFile || !stage) return;
+    const ro = new ResizeObserver(() => {
+      if (hostRef.current) preparePages(hostRef.current);
+      refresh();
+    });
+    ro.observe(stage);
+    return () => ro.disconnect();
+  }, [hasFile, refresh]);
 
-  // View mode changes are handled by CSS only - no re-rendering needed
-
-  // Wheel events - only when file is loaded
+  // Ctrl/Cmd + wheel or trackpad pinch zooms around the cursor; a plain wheel scrolls natively.
+  // Listening on window also stops the browser from zooming the whole UI.
   useEffect(() => {
-    if (!file || !osmdInstance) return; // Don't handle wheel events on upload page
-    
-    const handleWheel = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? -1 : 1;
-        smoothZoom(delta, e.clientX, e.clientY);
-        return;
-      }
-      
-      if (!lockView) {
-        e.preventDefault();
-        const z = zoom || 1;
-        const dx = -e.deltaX / z;
-        const dy = -e.deltaY / z;
-        panTo((panState?.x || 0) + dx, (panState?.y || 0) + dy, 0);
-      }
-    };
-    
-    const viewport = viewportRef.current;
-    if (viewport) {
-      viewport.addEventListener('wheel', handleWheel, { passive: false });
-      return () => viewport.removeEventListener('wheel', handleWheel);
-    }
-  }, [smoothZoom, zoom, panState?.x, panState?.y, panTo, lockView, file, osmdInstance]);
+    if (!hasFile) return;
 
-  // Safari pinch gesture support - only when file is loaded
-  useEffect(() => {
-    if (!file || !osmdInstance) return; // Don't handle gestures on upload page
-    
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    
+    const onWheel = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomBy(wheelZoomFactor(e), { x: e.clientX, y: e.clientY });
+    };
+
+    // Safari reports pinch as gesture events with a cumulative scale
     let lastScale = 1;
-    
-    const onGestureStart = (e) => { 
-      e.preventDefault(); 
-      lastScale = e.scale ?? 1; 
+    const onGestureStart = (e) => { e.preventDefault(); lastScale = 1; };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      const scale = e.scale || 1;
+      zoomBy(scale / lastScale, { x: e.clientX ?? window.innerWidth / 2, y: e.clientY ?? window.innerHeight / 2 });
+      lastScale = scale;
     };
-    
-    const onGestureChange = (e) => { 
-      e.preventDefault(); 
-      const scale = e.scale ?? 1; 
-      const d = scale - lastScale; 
-      lastScale = scale; 
-      
-      if (Math.abs(d) < 0.01) return; 
-      
-      smoothZoom(d > 0 ? 1 : -1, e.clientX ?? window.innerWidth/2, e.clientY ?? window.innerHeight/2); 
-    };
-    
     const onGestureEnd = (e) => { e.preventDefault(); };
-    
-    viewport.addEventListener('gesturestart', onGestureStart, { passive: false });
-   const viewportRef = useRef(null);
-   const containerRef = useRef(null);
-   const pageRef = useRef(null);
-   const osmdRef = useRef(null);
-   const fileInputRef = useRef(null);
-   const sheetContentRef = useRef(null);
-   const baseContentHeightRef = useRef(0); // unscaled total height of pages (including margins)
-   const lastMeasuredPagesRef = useRef(0);
-   const zoomValueRef = useRef(1); // holds current zoom safely for early callbacks
-   const baseContentWidthRef = useRef(0); // unscaled total width of content (for horizontal scrollbar)
-   const scrollDragRef = useRef({ startY: 0, startScrollTop: 0, thumbHeight: 0, trackHeight: 0 });
-   const scrollTrackRef = useRef(null);
-   const isDraggingScrollRef = useRef(false);
-   const scrollThumbSnapshotRef = useRef(null); // { totalHeight, clientHeight, thumbPx, trackPx }
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => { 
-      document.removeEventListener('mousemove', handleMouseMove); 
-      document.removeEventListener('mouseup', handleMouseUp); 
+
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    window.addEventListener('gesturestart', onGestureStart, { passive: false });
+    window.addEventListener('gesturechange', onGestureChange, { passive: false });
+    window.addEventListener('gestureend', onGestureEnd, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', onWheel, { capture: true });
+      window.removeEventListener('gesturestart', onGestureStart);
+      window.removeEventListener('gesturechange', onGestureChange);
+      window.removeEventListener('gestureend', onGestureEnd);
     };
-  }, [panState.isDragging, handleMouseMove, handleMouseUp, file, osmdInstance]);
+  }, [hasFile, zoomBy]);
+
+  // Ctrl/Cmd + = / - / 0 zoom the score instead of the browser page
+  useEffect(() => {
+    if (!hasFile) return;
+    const onKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomIn(); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomOut(); }
+      else if (e.key === '0') { e.preventDefault(); resetZoom(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasFile, zoomIn, zoomOut, resetZoom]);
+
+  // Drag to pan (scrolls the viewport directly, no store updates per move)
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!hasFile || !vp || lockView) return;
+
+    let drag = null;
+    const onPointerDown = (e) => {
+      if (e.button !== 0 || editModeActive) return;
+      const rect = vp.getBoundingClientRect();
+      // Leave clicks on the native scrollbars alone
+      if (e.clientX - rect.left >= vp.clientWidth || e.clientY - rect.top >= vp.clientHeight) return;
+      drag = { x: e.clientX, y: e.clientY, left: vp.scrollLeft, top: vp.scrollTop, id: e.pointerId };
+      vp.setPointerCapture(e.pointerId);
+      vp.classList.add('is-panning');
+    };
+    const onPointerMove = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!freezeMode) vp.scrollLeft = drag.left - (e.clientX - drag.x);
+      vp.scrollTop = drag.top - (e.clientY - drag.y);
+    };
+    const onPointerUp = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      vp.classList.remove('is-panning');
+    };
+
+    vp.addEventListener('pointerdown', onPointerDown);
+    vp.addEventListener('pointermove', onPointerMove);
+    vp.addEventListener('pointerup', onPointerUp);
+    vp.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      vp.removeEventListener('pointerdown', onPointerDown);
+      vp.removeEventListener('pointermove', onPointerMove);
+      vp.removeEventListener('pointerup', onPointerUp);
+      vp.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [hasFile, lockView, freezeMode, editModeActive]);
 
   // DnD file load
   useEffect(() => {
     if (file) return;
-    
-    const onDragOver = (e) => { 
-      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) { 
-        e.preventDefault(); 
-        setDragOver(true); 
-      } 
+
+    const onDragOver = (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        e.preventDefault();
+      }
     };
-    
-    const onDrop = (e) => { 
-      e.preventDefault(); 
-      setDragOver(false); 
-      const files = e.dataTransfer?.files; 
-      
-      if (files && files.length > 0) { 
-        const droppedFile = files[0]; 
-        if (/(\.(xml|musicxml|mxl))$/i.test(droppedFile.name)) { 
-          loadScore(droppedFile); 
-        } else { 
-          setError({ 
-            type: 'file', 
-            message: 'Formato de ficheiro não suportado', 
-            details: 'Por favor, selecione um ficheiro .xml, .musicxml ou .mxl', 
-            timestamp: new Date(), 
-            recoverable: true, 
-          }); 
-        } 
-      } 
+
+    const onDrop = (e) => {
+      e.preventDefault();
+      const files = e.dataTransfer?.files;
+
+      if (files && files.length > 0) {
+        const droppedFile = files[0];
+        if (/(\.(xml|musicxml|mxl))$/i.test(droppedFile.name)) {
+          loadScore(droppedFile);
+        } else {
+          setError({
+            type: 'file',
+            message: 'Formato de ficheiro não suportado',
+            details: 'Por favor, selecione um ficheiro .xml, .musicxml ou .mxl',
+            timestamp: new Date(),
+            recoverable: true,
+          });
+        }
+      }
     };
-    
-    const onDragLeaveOrEnd = () => setDragOver(false);
-    
+
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
-    window.addEventListener('dragleave', onDragLeaveOrEnd);
-    window.addEventListener('dragend', onDragLeaveOrEnd);
-    
     return () => {
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
-      window.removeEventListener('dragleave', onDragLeaveOrEnd);
-      window.removeEventListener('dragend', onDragLeaveOrEnd);
     };
   }, [file, loadScore, setError]);
 
-  // Global fallbacks for zooming
-  useEffect(() => {
-    const onGlobalWheel = (e) => { 
-      if (e.ctrlKey) { 
-        e.preventDefault(); 
-        const delta = e.deltaY > 0 ? -1 : 1; 
-        smoothZoom(delta, e.clientX, e.clientY); 
-      } 
-    };
-    
-    const onGStart = (e) => { e.preventDefault(); };
-    const onGChange = (e) => { 
-      e.preventDefault(); 
-      const cx = e.clientX ?? window.innerWidth / 2; 
-      const cy = e.clientY ?? window.innerHeight / 2; 
-      smoothZoom((e.scale ?? 1) > 1 ? 1 : -1, cx, cy); 
-    };
-    const onGEnd = (e) => { e.preventDefault(); };
-    
-    window.addEventListener('wheel', onGlobalWheel, { passive: false, capture: true });
-    window.addEventListener('gesturestart', onGStart, { passive: false, capture: true });
-    window.addEventListener('gesturechange', onGChange, { passive: false, capture: true });
-    window.addEventListener('gestureend', onGEnd, { passive: false, capture: true });
-    
-    return () => {
-      window.removeEventListener('wheel', onGlobalWheel, { capture: true });
-      window.removeEventListener('gesturestart', onGStart, { capture: true });
-      window.removeEventListener('gesturechange', onGChange, { capture: true });
-      window.removeEventListener('gestureend', onGEnd, { capture: true });
-    };
-  }, [smoothZoom, file, osmdInstance]);
-
-  const handleFileChange = (e) => { 
-    const file = e.target.files?.[0]; 
-    if (file) { 
-      loadScore(file); 
-    } 
-  };
-  
-  const handleFileUpload = () => { 
-    fileInputRef.current?.click(); 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      loadScore(file);
+    }
   };
 
-  // Funções de fit melhoradas
-  const fitPageToViewportWidth = useCallback(() => {
-    const viewport = viewportRef.current;
-    const page = pageRef.current;
-    if (!viewport || !page) return;
-    const available = Math.max(0, viewport.clientWidth - 64);
-    const rect = page.getBoundingClientRect();
-    const baseWidth = rect.width / (zoom || 1);
-    // Additional logic would go here
-  }, [zoom]);
+  const handleFileUpload = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
-    <div className={`music-sheet-container ${!hasFile ? 'upload-mode' : ''}`} style={{ background: hasFile ? '#f5f5f5' : '#1e1e1e', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="score-viewer-root">
       <input
         ref={fileInputRef}
         type="file"
@@ -624,30 +338,25 @@ const ScoreViewer = () => {
         onChange={handleFileChange}
         style={{ display: 'none' }}
       />
-      
+
       {/* Upload area when no file is loaded */}
       {!hasFile && (
-        <div className={`upload-area ${dragOver ? 'drag-over' : ''}`} style={{
-          border: '2px dashed #666',
-          borderRadius: '12px',
-          padding: '60px 40px',
-          textAlign: 'center',
-          backgroundColor: dragOver ? '#333' : '#2a2a2a',
-          transition: 'all 0.3s ease',
-          maxWidth: '500px',
-          width: '90%'
-        }}>
-          <Upload size={48} style={{ color: '#888', marginBottom: '20px' }} />
-          <h3 style={{ color: '#fff', marginBottom: '10px' }}>Upload Music Score</h3>
-          <p style={{ color: '#888', marginBottom: '20px' }}>
-            Drag and drop your MusicXML file here, or click to browse
-          </p>
-          <Button onClick={handleFileUpload} style={{ backgroundColor: '#007acc', color: 'white' }}>
-            Choose File
-          </Button>
-          <p style={{ color: '#666', fontSize: '12px', marginTop: '15px' }}>
-            Supported formats: .xml, .musicxml, .mxl
-          </p>
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ border: '2px dashed #666', borderRadius: '12px', padding: '60px 40px', textAlign: 'center', backgroundColor: '#2a2a2a', transition: 'all 0.3s ease', maxWidth: '500px', width: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%' }}>
+              <Upload size={48} style={{ color: '#888', marginBottom: '20px' }} />
+            </div>
+            <h3 style={{ color: '#fff', marginBottom: '10px' }}>Upload Music Score</h3>
+            <p style={{ color: '#888', marginBottom: '20px' }}>
+              Drag and drop your MusicXML file here, or click to browse
+            </p>
+            <Button onClick={handleFileUpload} style={{ backgroundColor: '#FFD700', color: 'black' }}>
+              Choose File
+            </Button>
+            <p style={{ color: '#666', fontSize: '12px', marginTop: '15px' }}>
+              Supported formats: .xml, .musicxml, .mxl
+            </p>
+          </div>
         </div>
       )}
 
@@ -705,74 +414,41 @@ const ScoreViewer = () => {
         </div>
       )}
 
-      {/* Main viewport - only shown when file is loaded */}
+      {/* Main viewport - only shown when file is loaded.
+          sizer = scaled size (drives the native scroll range), stage = unscaled pages + transform */}
       {hasFile && (
-        <div
-          ref={viewportRef}
-          className="sheet-viewport"
-          style={{
-            width: '100%',
-            height: '100vh',
-            overflow: lockView ? 'auto' : 'auto',
-            cursor: lockView ? 'default' : 'grab',
-            position: 'relative'
-          }}
-          onMouseDown={lockView ? undefined : handleMouseDown}
-          onTouchStart={lockView ? undefined : handleTouchStart}
-        >
-          <div
-            ref={containerRef}
-            className="sheet-content"
-            style={{
-              transform: lockView ? 'none' : `translate(${panState?.x || 0}px, ${panState?.y || 0}px) scale(${zoom || 1})`,
-              transformOrigin: '0 0',
-              minHeight: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: lockView ? '40px 20px' : '20px'
-            }}
-          />
+        <div ref={viewportRef} className={`score-viewport${lockView ? '' : ' can-pan'}`}>
+          <div className="score-frame">
+            <div ref={sizerRef} className="score-sizer">
+              <div ref={stageRef} className="score-stage">
+                <div ref={hostRef} className="score-host" style={{ width: renderWidth }} />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Zoom controls - only shown when file is loaded */}
       {hasFile && (
-        <div style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          zIndex: 100
-        }}>
-          <Button
-            onClick={zoomIn}
-            size="sm"
-            style={{ backgroundColor: '#333', color: 'white' }}
-          >
-            <ZoomIn size={16} />
-          </Button>
-          <Button
-            onClick={zoomOut}
-            size="sm"
-            style={{ backgroundColor: '#333', color: 'white' }}
-          >
+        <div className="score-zoom-controls">
+          <Button variant="ghost" size="sm" onClick={zoomOut} title="Reduzir (Ctrl -)">
             <ZoomOut size={16} />
           </Button>
-          <Button
-            onClick={resetZoom}
-            size="sm"
-            style={{ backgroundColor: '#333', color: 'white' }}
-          >
-            <RotateCcw size={16} />
+          <button type="button" className="score-zoom-label" onClick={resetZoom} title="Repor 100% (Ctrl 0)">
+            {/* Text is set by useZoom so it stays live during a gesture */}
+            <span ref={zoomLabelRef} />
+          </button>
+          <Button variant="ghost" size="sm" onClick={zoomIn} title="Ampliar (Ctrl +)">
+            <ZoomIn size={16} />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => fitToWidth()} title="Ajustar à largura">
+            <MoveHorizontal size={16} />
           </Button>
         </div>
       )}
 
       {/* Edit controls - only shown when edit mode is active */}
-      {editMode.isActive && (
+      {editModeActive && (
         <div style={{
           position: 'fixed',
           top: '20px',

@@ -185,7 +185,7 @@ body {
 .widgets-overlay {
   position: absolute;
   inset: 0;
-  pointer-events: auto; /* allow clicks/drags on widgets */
+  pointer-events: none; /* only the widgets take input; the score below keeps scroll/pan */
   z-index: 10;
 }
 
@@ -196,7 +196,9 @@ body {
   border: 1px solid hsl(var(--border) / 0.2);
   border-radius: var(--radius);
   box-shadow: var(--widget-shadow);
-  transition: all var(--widget-animation-duration) ease-out;
+  /* Not transform: position/scale changes must not animate (they jump on drop) */
+  transition: box-shadow var(--widget-animation-duration) ease-out,
+              opacity var(--widget-animation-duration) ease-out;
 }
 
 .magnetic-widget:hover {
@@ -379,11 +381,6 @@ body {
     padding: 0 1rem;
   }
   
-  .magnetic-widget {
-    min-width: 240px;
-    max-width: calc(100vw - 2rem);
-  }
-  
   .widget-title-bar {
     padding: 0.5rem;
   }
@@ -402,12 +399,6 @@ body {
   
   .quick-actions-content {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1023px) {
-  .magnetic-widget {
-    max-width: calc(100vw - 4rem);
   }
 }
 

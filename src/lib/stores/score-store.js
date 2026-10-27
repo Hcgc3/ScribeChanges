@@ -1,6 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export const MM_TO_PX = 96 / 25.4;
+// OSMD lays a page out in units of 10px with a 4-unit (40px) staff, and takes the
+// page width from its container. Giving the container a fixed width of
+// pageWidth / staffHeight * 40px keeps the configured staff size and makes the
+// layout independent of the window size (no reflow on resize or browser zoom).
+const OSMD_STAFF_HEIGHT_PX = 40;
+export const getRenderWidthPx = ({ widthMm = 210, staffHeight = 7 } = {}) =>
+  Math.round((widthMm / staffHeight) * OSMD_STAFF_HEIGHT_PX);
+// CSS scale at which a rendered page shows at paper size, i.e. what 100% zoom means.
+export const getPaperScale = (pageSettings = {}) =>
+  ((pageSettings.widthMm || 210) * MM_TO_PX) / getRenderWidthPx(pageSettings);
+
 // Score Store - Music score state management
 export const useScoreStore = create(
   persist(
@@ -326,6 +338,8 @@ export const useScoreStore = create(
         try {
           state.clearSVGCache();
           osmd.setOptions({ pageFormat });
+          // The viewer's host element is OSMD's container; size it before rendering.
+          if (osmd.container) osmd.container.style.width = `${getRenderWidthPx({ widthMm, staffHeight: merged.staffHeight })}px`;
           await osmd.render();
           let totalPages = state.viewSettings.totalPages;
           try { totalPages = osmd.GraphicSheet?.MusicPages?.length || totalPages; } catch {}
@@ -343,22 +357,6 @@ export const useScoreStore = create(
           if (state.addToHistory) {
             state.addToHistory({ type: 'page-settings', before: prevSettings, after: { ...prevSettings, width, height, unit, preset, widthMm, heightMm, margins: { ...margins }, pageFormat }, pagesBefore: prevPages, pagesAfter: totalPages });
           }
-          // Re-cache common zoom levels asynchronously
-          setTimeout(() => {
-            try {
-              const common = [0.5, 1.0, 1.5];
-              common.forEach(z => {
-                if (!state.getSVGCacheEntry(z)) {
-                  const svg = document.querySelector('.osmd-container svg');
-                  if (svg) {
-                    const clone = svg.cloneNode(true);
-                    const str = new XMLSerializer().serializeToString(clone);
-                    state.setSVGCacheEntry(z, str, { width: clone.getAttribute('width'), height: clone.getAttribute('height') });
-                  }
-                }
-              });
-            } catch {}
-          }, 400);
           return { ok: true, pageFormat, pages: totalPages, warning: pageDropWarning };
         } catch (e) {
           console.error('applyPageSettings error', e);
@@ -385,16 +383,15 @@ export const useScoreStore = create(
         }));
       },
 
+      // Multiplicative steps so each click feels the same at any zoom level
       zoomIn: () => {
         const { viewSettings } = get();
-        const newZoom = Math.min(viewSettings.maxZoom, viewSettings.zoom + viewSettings.zoomStep);
-        get().setZoom(newZoom);
+        get().setZoom(viewSettings.zoom * (1 + viewSettings.zoomStep));
       },
 
       zoomOut: () => {
         const { viewSettings } = get();
-        const newZoom = Math.max(viewSettings.minZoom, viewSettings.zoom - viewSettings.zoomStep);
-        get().setZoom(newZoom);
+        get().setZoom(viewSettings.zoom / (1 + viewSettings.zoomStep));
       },
 
       resetZoom: () => {

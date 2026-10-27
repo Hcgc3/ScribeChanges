@@ -27,6 +27,8 @@ export const useAppStore = create(
         hoverZoneHeight: 3,
         animationDuration: 300,
         autoHideTimeout: null,
+        // Measured by Header: one row on desktop, two rows (nav below) under 1024px
+        height: 64,
       },
       
       // Fullscreen state
@@ -229,6 +231,12 @@ export const useAppStore = create(
         });
       },
 
+      setHeaderHeight: (height) => {
+        const { header } = get();
+        if (header.height === height) return;
+        set({ header: { ...header, height } });
+      },
+
       setHeaderSettings: (settings) => {
         const { header } = get();
         set({
@@ -419,7 +427,7 @@ export const useAppStore = create(
       // Layout calculations
       getScoreAreaHeight: () => {
         const { viewport, header } = get();
-        const headerHeight = (header.isVisible || header.isHovered) ? 64 : 0;
+        const headerHeight = (header.isVisible || header.isHovered) ? (header.height ?? 64) : 0;
         return viewport.height - headerHeight;
       },
 

@@ -36,6 +36,7 @@ const Header = () => {
     pinHeader,
     unpinHeader,
     setHeaderHovered,
+    setHeaderHeight,
     startHeaderAutoHide,
     cancelHeaderAutoHide,
     toggleFullscreen,
@@ -43,7 +44,7 @@ const Header = () => {
     getBreakpoint,
   } = useAppStore();
 
-  const { widgets, toggleWidgetVisibility, hideAllWidgets, showAllWidgets } = useWidgetStore();
+  const { widgets, toggleWidgetVisibility, hideAllWidgets, showAllWidgets, resetLayout } = useWidgetStore();
   const { viewSettings, toggleLockView } = useScoreStore();
 
   const [widgetsDialogOpen, setWidgetsDialogOpen] = useState(false);
@@ -53,6 +54,16 @@ const Header = () => {
   const breakpoint = getBreakpoint();
   const isMobile = breakpoint === 'mobile';
   const isTablet = breakpoint === 'tablet';
+
+  // Report the real header height so the score area starts below it (the
+  // compact nav adds a second row on mobile/tablet)
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeaderHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [setHeaderHeight]);
 
   // Handle hover zone interactions
   useEffect(() => {
@@ -165,7 +176,6 @@ const Header = () => {
 
   // Calculate header classes and styles
   const headerClasses = [
-    'app-header',
     'fixed top-0 left-0 right-0 z-50',
     'bg-background/95 backdrop-blur-sm',
     'border-b border-border/20',
@@ -433,6 +443,7 @@ const Header = () => {
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" className="mr-auto" onClick={resetLayout}>Repor posições</Button>
             <Button variant="ghost" size="sm" onClick={hideAllWidgets}>Desativar todos</Button>
             <Button variant="default" size="sm" onClick={showAllWidgets}>Ativar todos</Button>
           </div>

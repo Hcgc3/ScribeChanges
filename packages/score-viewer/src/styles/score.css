@@ -573,3 +573,123 @@
   cursor: pointer; 
 }
 
+
+/* ------------------------------------------------------------------
+   Score viewport (zoom engine)
+   viewport  -> native scrolling
+   frame     -> padding around the pages, grows with the content
+   sizer     -> scaled size of the pages, so the scroll range is exact
+   stage     -> unscaled pages, scaled with a transform from its top-left
+   ------------------------------------------------------------------ */
+.score-viewer-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.score-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #e4e4e7;
+  scrollbar-width: thin;
+  scrollbar-color: #888 transparent;
+}
+
+.dark .score-viewport {
+  background: #181818;
+}
+
+.score-viewport.can-pan {
+  cursor: grab;
+}
+
+.score-viewport.can-pan.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.score-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.score-viewport::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.score-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.score-frame {
+  width: max-content;
+  min-width: 100%;
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+.score-sizer {
+  position: relative;
+  margin: 0 auto;
+}
+
+.score-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.score-host > div {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
+}
+
+.score-host > div + div {
+  margin-top: 48px;
+}
+
+/* Pages outside the viewport are not painted; ScoreViewer sets their intrinsic size */
+.score-host > .score-page {
+  content-visibility: auto;
+}
+
+.score-host svg {
+  display: block;
+}
+
+.score-zoom-controls {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(39, 39, 42, 0.92);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.score-zoom-label {
+  min-width: 52px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: inherit;
+  background: transparent;
+}
+
+.score-zoom-label:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useWidgetStore } from '@/lib/stores/widget-store';
-import { useAppStore } from '@/lib/stores/app-store';
 import MediaControlsWidget from '../controls/MediaControlsWidget';
 import EditingToolsWidget from '../controls/EditingToolsWidget';
 import PropertiesWidget from '../controls/PropertiesWidget';
@@ -9,6 +9,7 @@ import PageSizeEditorWidget from '../controls/PageSizeEditorWidget';
 
 const WidgetManager = () => {
   const containerRef = useRef(null);
+  // Narrow selection: drag state changes every pointer move and must not re-render this
   const {
     widgets,
     configs,
@@ -17,9 +18,15 @@ const WidgetManager = () => {
     hideAllWidgets,
     showAllWidgets,
     cleanup,
-  } = useWidgetStore();
-
-  // const { viewport } = useAppStore(); // removido: não utilizado
+  } = useWidgetStore(useShallow((state) => ({
+    widgets: state.widgets,
+    configs: state.configs,
+    initializeDefaultWidgets: state.initializeDefaultWidgets,
+    updateViewport: state.updateViewport,
+    hideAllWidgets: state.hideAllWidgets,
+    showAllWidgets: state.showAllWidgets,
+    cleanup: state.cleanup,
+  })));
 
   // Initialize widgets on mount
   useEffect(() => {
@@ -51,13 +58,7 @@ const WidgetManager = () => {
     const ro = new ResizeObserver(() => measure());
     ro.observe(el);
 
-    // Fallback: also listen to window resize
-    window.addEventListener('resize', measure);
-
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-    };
+    return () => ro.disconnect();
   }, [updateViewport]);
 
   // Global keyboard shortcuts for widgets

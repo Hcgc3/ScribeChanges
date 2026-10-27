@@ -1,122 +1,148 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useScoreStore } from '@/lib/stores/score-store';
 
-export const useZoom = () => {
-  const { viewSettings, setZoom, panState, setPanState } = useScoreStore();
+// Zoom is applied straight to the DOM (sizer size + stage transform), so a wheel
+// or pinch gesture never re-renders React or writes to localStorage per frame.
+// The store only receives the final value once the gesture settles.
+const COMMIT_DELAY_MS = 250;
+// While zooming, the stage is a GPU layer that gets scaled as a bitmap; once the
+// gesture settles the layer is dropped so the SVG is re-rasterized crisp.
+const SETTLE_DELAY_MS = 160;
+const ANIMATION_MS = 180;
 
-  const zoomTimeoutRef = useRef(null);
-  const lastZoomTimeRef = useRef(0);
-  const zoomVelocityRef = useRef(0);
-  const rafPendingRef = useRef(false);
-  const pendingZoomRef = useRef(null);
+const zoomStepFactor = () => 1 + (useScoreStore.getState().viewSettings.zoomStep ?? 0.2);
 
-  const applyPendingZoom = useCallback(() => {
-    rafPendingRef.current = false;
-    if (!pendingZoomRef.current) return;
-    const { delta, centerX, centerY } = pendingZoomRef.current;
-    pendingZoomRef.current = null;
+export const useZoom = ({ viewportRef, sizerRef, stageRef, labelRef, baseScale = 1 }) => {
+  const zoomRef = useRef(useScoreStore.getState().viewSettings.zoom || 1);
+  const baseScaleRef = useRef(baseScale);
+  const sizeRef = useRef({ width: 0, height: 0 });
+  const settleTimerRef = useRef(null);
+  const commitTimerRef = useRef(null);
+  const animationRef = useRef(null);
+  const pendingRef = useRef(null);
 
-    // Original smoothZoom logic (below) executes once per animation frame
-    const now = Date.now();
-    const timeDelta = now - lastZoomTimeRef.current;
-    lastZoomTimeRef.current = now;
+  baseScaleRef.current = baseScale;
 
-    const velocity = Math.abs(delta) / Math.max(timeDelta, 16);
-    zoomVelocityRef.current = velocity;
+  const clamp = useCallback((z) => {
+    const { minZoom = 0.25, maxZoom = 4 } = useScoreStore.getState().viewSettings;
+    return Math.max(minZoom, Math.min(maxZoom, z));
+  }, []);
 
-    const baseStep = viewSettings.zoomStep ?? 0.1;
-    const velocityMultiplier = Math.min(Math.max(velocity * 0.1, 0.5), 3.0);
-    const dynamicStep = baseStep * velocityMultiplier;
+  const markZooming = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.style.willChange = 'transform';
+    clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      if (stageRef.current) stageRef.current.style.willChange = '';
+    }, SETTLE_DELAY_MS);
+  }, [stageRef]);
 
-    const zoomDirection = delta > 0 ? 1 : -1;
-    const newZoom = Math.max(
-      viewSettings.minZoom ?? 0.25,
-      Math.min(viewSettings.maxZoom ?? 4.0, viewSettings.zoom + dynamicStep * zoomDirection)
-    );
+  const commit = useCallback(() => {
+    clearTimeout(commitTimerRef.current);
+    const { viewSettings, setZoom } = useScoreStore.getState();
+    if (Math.abs(viewSettings.zoom - zoomRef.current) > 1e-4) setZoom(zoomRef.current);
+  }, []);
 
-    if (centerX !== 0 || centerY !== 0) {
-      const zoomRatio = newZoom / viewSettings.zoom;
-      const offsetX = ((centerX - window.innerWidth / 2) * (1 - zoomRatio)) / newZoom;
-      const offsetY = ((centerY - window.innerHeight / 2) * (1 - zoomRatio)) / newZoom;
-      setPanState({ x: panState.x + offsetX, y: panState.y + offsetY });
+  const scheduleCommit = useCallback(() => {
+    clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(commit, COMMIT_DELAY_MS);
+  }, [commit]);
+
+  // Sets the zoom keeping the content point under `anchor` (client coords) fixed.
+  const applyZoom = useCallback((nextZoom, anchor) => {
+    const vp = viewportRef.current;
+    const sizer = sizerRef.current;
+    const stage = stageRef.current;
+    const z = clamp(nextZoom);
+    const prevScale = zoomRef.current * baseScaleRef.current;
+    const scale = z * baseScaleRef.current;
+    zoomRef.current = z;
+    if (labelRef?.current) labelRef.current.textContent = `${Math.round(z * 100)}%`;
+    if (!vp || !sizer || !stage) return;
+
+    const vpRect = vp.getBoundingClientRect();
+    const ax = anchor ? anchor.x : vpRect.left + vp.clientWidth / 2;
+    const ay = anchor ? anchor.y : vpRect.top + vp.clientHeight / 2;
+    const before = stage.getBoundingClientRect();
+    const contentX = (ax - before.left) / prevScale;
+    const contentY = (ay - before.top) / prevScale;
+
+    const { width, height } = sizeRef.current;
+    sizer.style.width = `${width * scale}px`;
+    sizer.style.height = `${height * scale}px`;
+    stage.style.transform = `scale(${scale})`;
+
+    const after = stage.getBoundingClientRect();
+    vp.scrollLeft += after.left + contentX * scale - ax;
+    vp.scrollTop += after.top + contentY * scale - ay;
+  }, [viewportRef, sizerRef, stageRef, labelRef, clamp]);
+
+  // Wheel/pinch deltas are coalesced so the DOM is touched at most once per frame.
+  const zoomBy = useCallback((factor, anchor) => {
+    const pending = pendingRef.current;
+    if (pending) {
+      pending.factor *= factor;
+      pending.anchor = anchor;
+      return;
     }
+    pendingRef.current = { factor, anchor };
+    requestAnimationFrame(() => {
+      const { factor: f, anchor: a } = pendingRef.current;
+      pendingRef.current = null;
+      cancelAnimationFrame(animationRef.current);
+      markZooming();
+      applyZoom(zoomRef.current * f, a);
+      scheduleCommit();
+    });
+  }, [applyZoom, markZooming, scheduleCommit]);
 
-    setZoom(newZoom);
-
-    if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current);
-
-    zoomTimeoutRef.current = setTimeout(() => {
-      if (zoomVelocityRef.current > 2) {
-        const momentumDelta = zoomDirection * dynamicStep * 0.3;
-        const momentumZoom = Math.max(
-          viewSettings.minZoom ?? 0.25,
-          Math.min(viewSettings.maxZoom ?? 4.0, newZoom + momentumDelta)
-        );
-        setZoom(momentumZoom);
-      }
-      zoomVelocityRef.current = 0;
-    }, 150);
-  }, [viewSettings.zoom, viewSettings.zoomStep, viewSettings.minZoom, viewSettings.maxZoom, setZoom, panState, setPanState]);
-
-  // Throttled smoothZoom: coalesces rapid wheel/pinch deltas into one per frame
-  const smoothZoom = useCallback((delta, centerX = 0, centerY = 0) => {
-    pendingZoomRef.current = { delta, centerX, centerY };
-    if (!rafPendingRef.current) {
-      rafPendingRef.current = true;
-      requestAnimationFrame(applyPendingZoom);
-    }
-  }, [applyPendingZoom]);
-
-  const zoomTo = useCallback((targetZoom, duration = 300) => {
-    const startZoom = viewSettings.zoom;
-    const startTime = Date.now();
-
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentZoom = startZoom + (targetZoom - startZoom) * easeOut;
-      setZoom(currentZoom);
-      if (progress < 1) requestAnimationFrame(animate);
+  const zoomTo = useCallback((target, anchor) => {
+    cancelAnimationFrame(animationRef.current);
+    const start = zoomRef.current;
+    const end = clamp(target);
+    const t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min((now - t0) / ANIMATION_MS, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      markZooming();
+      applyZoom(start + (end - start) * eased, anchor);
+      if (p < 1) animationRef.current = requestAnimationFrame(step);
+      else commit();
     };
+    animationRef.current = requestAnimationFrame(step);
+  }, [applyZoom, clamp, markZooming, commit]);
 
-    requestAnimationFrame(animate);
-  }, [viewSettings.zoom, setZoom]);
+  const zoomIn = useCallback(() => zoomTo(zoomRef.current * zoomStepFactor()), [zoomTo]);
+  const zoomOut = useCallback(() => zoomTo(zoomRef.current / zoomStepFactor()), [zoomTo]);
+  const resetZoom = useCallback(() => zoomTo(1), [zoomTo]);
 
-  const zoomIn = useCallback(() => {
-    const step = (viewSettings.zoomStep ?? 0.1) * 2;
-    const targetZoom = Math.min(viewSettings.maxZoom ?? 4.0, (viewSettings.zoom ?? 1) + step);
-    zoomTo(targetZoom);
-  }, [viewSettings.zoom, viewSettings.zoomStep, viewSettings.maxZoom, zoomTo]);
+  const fitToWidth = useCallback((gutter = 64) => {
+    const vp = viewportRef.current;
+    const { width } = sizeRef.current;
+    if (!vp || !width) return;
+    zoomTo((vp.clientWidth - gutter) / (width * baseScaleRef.current));
+  }, [viewportRef, zoomTo]);
 
-  const zoomOut = useCallback(() => {
-    const step = (viewSettings.zoomStep ?? 0.1) * 2;
-    const targetZoom = Math.max(viewSettings.minZoom ?? 0.25, (viewSettings.zoom ?? 1) - step);
-    zoomTo(targetZoom);
-  }, [viewSettings.zoom, viewSettings.zoomStep, viewSettings.minZoom, zoomTo]);
+  // Re-measure the unscaled stage (after a render or page-size change) and re-apply.
+  const refresh = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    sizeRef.current = { width: stage.offsetWidth, height: stage.offsetHeight };
+    applyZoom(zoomRef.current);
+  }, [stageRef, applyZoom]);
 
-  const resetZoom = useCallback(() => {
-    zoomTo(1.0);
-    setTimeout(() => setPanState({ x: 0, y: 0 }), 150);
-  }, [zoomTo, setPanState]);
+  // Zoom changes coming from elsewhere (e.g. the Quick Actions widget) go through the store.
+  useEffect(() => useScoreStore.subscribe((state, prev) => {
+    const z = state.viewSettings.zoom;
+    if (z !== prev.viewSettings.zoom && Math.abs(z - zoomRef.current) > 1e-4) zoomTo(z);
+  }), [zoomTo]);
 
-  const fitToWidth = useCallback((containerWidth, contentWidth = 800) => {
-    const targetZoom = Math.min(
-      viewSettings.maxZoom ?? 4.0,
-      Math.max(viewSettings.minZoom ?? 0.25, (containerWidth * 0.9) / contentWidth)
-    );
-    zoomTo(targetZoom);
-  }, [viewSettings.minZoom, viewSettings.maxZoom, zoomTo]);
+  useEffect(() => () => {
+    clearTimeout(settleTimerRef.current);
+    clearTimeout(commitTimerRef.current);
+    cancelAnimationFrame(animationRef.current);
+  }, []);
 
-  const fitToHeight = useCallback((containerHeight, contentHeight = 1100) => {
-    const targetZoom = Math.min(
-      viewSettings.maxZoom ?? 4.0,
-      Math.max(viewSettings.minZoom ?? 0.25, (containerHeight * 0.9) / contentHeight)
-    );
-    zoomTo(targetZoom);
-  }, [viewSettings.minZoom, viewSettings.maxZoom, zoomTo]);
-
-  useEffect(() => () => { if (zoomTimeoutRef.current) clearTimeout(zoomTimeoutRef.current); }, []);
-
-  return { zoom: viewSettings.zoom, minZoom: viewSettings.minZoom, maxZoom: viewSettings.maxZoom, smoothZoom, zoomTo, zoomIn, zoomOut, resetZoom, fitToWidth, fitToHeight };
+  return { getZoom: () => zoomRef.current, zoomBy, zoomTo, zoomIn, zoomOut, resetZoom, fitToWidth, refresh };
 };

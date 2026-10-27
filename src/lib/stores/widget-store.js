@@ -1,16 +1,61 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// Snap zones configuration
-const SNAP_ZONES = {
-  TOP_LEFT: { x: 0, y: 0, width: 200, height: 100, priority: 1 },
-  TOP_RIGHT: { x: -200, y: 0, width: 200, height: 100, priority: 1 },
-  TOP_CENTER: { x: -100, y: 0, width: 200, height: 80, priority: 2 },
-  BOTTOM_LEFT: { x: 0, y: -120, width: 250, height: 120, priority: 1 },
-  BOTTOM_RIGHT: { x: -250, y: -120, width: 250, height: 120, priority: 1 },
-  BOTTOM_CENTER: { x: -125, y: -80, width: 250, height: 80, priority: 2 },
-  LEFT_EDGE: { x: 0, y: 100, width: 60, height: -200, priority: 3 },
-  RIGHT_EDGE: { x: -60, y: 100, width: 60, height: -200, priority: 3 },
+// Widgets are laid out for this score-area size and shrink below it, so they
+// keep the same share of the screen instead of piling up on small displays.
+const DESIGN_AREA = { width: 1440, height: 800 };
+const MIN_UI_SCALE = 0.6;
+const MAX_UI_SCALE = 1;
+// Height of a minimized widget (title bar only), before scaling
+const TITLE_BAR_HEIGHT = 37;
+
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+export const getUiScale = (area) => clamp(
+  Math.min(area.width / DESIGN_AREA.width, area.height / DESIGN_AREA.height),
+  MIN_UI_SCALE,
+  MAX_UI_SCALE,
+);
+
+// A widget's place is an anchor (left/center/right × top/bottom) plus an offset in
+// screen px from that edge, so it stays glued to its corner when the window
+// changes size. Returns CSS for an absolutely positioned, scaled widget.
+export const getWidgetPlacement = (widget, area, scale, padding = 16) => {
+  const { anchor, offset } = widget;
+  const w = widget.size.width * scale;
+  const h = (widget.isMinimized ? TITLE_BAR_HEIGHT : widget.size.height) * scale;
+  const style = {};
+  let translate = '';
+
+  if (anchor.x === 'center') {
+    const limit = Math.max(0, (area.width - w) / 2 - padding);
+    style.left = `calc(50% + ${clamp(offset.x, -limit, limit)}px)`;
+    translate = 'translateX(-50%) ';
+  } else {
+    style[anchor.x] = clamp(offset.x, padding, Math.max(padding, area.width - w - padding));
+  }
+  style[anchor.y] = clamp(offset.y, padding, Math.max(padding, area.height - h - padding));
+
+  return {
+    style,
+    transform: `${translate}scale(${scale})`,
+    transformOrigin: `${anchor.x} ${anchor.y}`,
+  };
+};
+
+// Picks the anchor nearest to where a widget was dropped (rect in score-area px).
+const rectToPlacement = (rect, area) => {
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const x = cx < area.width / 3 ? 'left' : cx > (area.width * 2) / 3 ? 'right' : 'center';
+  const y = cy < area.height / 2 ? 'top' : 'bottom';
+  return {
+    anchor: { x, y },
+    offset: {
+      x: x === 'left' ? rect.left : x === 'right' ? area.width - rect.left - rect.width : cx - area.width / 2,
+      y: y === 'top' ? rect.top : area.height - rect.top - rect.height,
+    },
+  };
 };
 
 // Default widget metadata (not fully persisted)
@@ -19,7 +64,8 @@ const DEFAULT_WIDGETS = {
     id: 'mediaControls',
     type: 'MediaControls',
     title: 'Controlos de Reprodução',
-    position: { x: 20, y: 20 },
+    anchor: { x: 'center', y: 'bottom' },
+    offset: { x: 0, y: 16 },
     size: { width: 440, height: 140 },
     minSize: { width: 320, height: 100 },
     maxSize: { width: 640, height: 200 },
@@ -31,14 +77,13 @@ const DEFAULT_WIDGETS = {
     canResize: true,
     canMinimize: true,
     zIndex: 100,
-    snapZone: 'TOP_LEFT',
-    lastPosition: null,
   },
   editingTools: {
     id: 'editingTools',
     type: 'EditingTools',
     title: 'Ferramentas de Edição',
-    position: { x: 20, y: 120 },
+    anchor: { x: 'left', y: 'top' },
+    offset: { x: 16, y: 16 },
     size: { width: 360, height: 280 },
     minSize: { width: 280, height: 200 },
     maxSize: { width: 560, height: 400 },
@@ -50,14 +95,13 @@ const DEFAULT_WIDGETS = {
     canResize: true,
     canMinimize: true,
     zIndex: 99,
-    snapZone: 'LEFT_EDGE',
-    lastPosition: null,
   },
   properties: {
     id: 'properties',
     type: 'Properties',
     title: 'Propriedades',
-    position: { x: -320, y: 20 },
+    anchor: { x: 'right', y: 'top' },
+    offset: { x: 16, y: 16 },
     size: { width: 300, height: 400 },
     minSize: { width: 260, height: 300 },
     maxSize: { width: 480, height: 600 },
@@ -69,14 +113,13 @@ const DEFAULT_WIDGETS = {
     canResize: true,
     canMinimize: true,
     zIndex: 98,
-    snapZone: 'RIGHT_EDGE',
-    lastPosition: null,
   },
   pageSizeEditor: {
     id: 'pageSizeEditor',
     type: 'PageSizeEditor',
     title: 'Editor de Tamanho de Página',
-    position: { x: 20, y: 300 },
+    anchor: { x: 'left', y: 'bottom' },
+    offset: { x: 16, y: 16 },
     size: { width: 280, height: 350 },
     minSize: { width: 260, height: 300 },
     maxSize: { width: 400, height: 600 },
@@ -88,14 +131,14 @@ const DEFAULT_WIDGETS = {
     canResize: true,
     canMinimize: true,
     zIndex: 97,
-    snapZone: 'LEFT_EDGE',
-    lastPosition: null,
   },
   quickActions: {
     id: 'quickActions',
     type: 'QuickActions',
     title: 'Ações Rápidas',
-    position: { x: -200, y: -180 },
+    // Sits above the score viewer's zoom controls
+    anchor: { x: 'right', y: 'bottom' },
+    offset: { x: 16, y: 72 },
     size: { width: 220, height: 240 },
     minSize: { width: 180, height: 180 },
     maxSize: { width: 320, height: 360 },
@@ -107,10 +150,21 @@ const DEFAULT_WIDGETS = {
     canResize: false,
     canMinimize: true,
     zIndex: 96,
-    snapZone: 'BOTTOM_RIGHT',
-    lastPosition: null,
   },
 };
+
+const IDLE_DRAG_STATE = {
+  activeWidget: null,
+  startRect: null,
+  grabOffset: { x: 0, y: 0 },
+  isDragging: false,
+  snapPreview: null,
+  simulatedPosition: null, // visual top-left during drag, applied as a transform only
+};
+
+// Fields of a widget that are saved between sessions
+const PERSISTED_FIELDS = ['title', 'anchor', 'offset', 'size', 'isVisible', 'isPinned', 'isMinimized'];
+const pickPersisted = (widget) => Object.fromEntries(PERSISTED_FIELDS.map((k) => [k, widget[k]]));
 
 export const useWidgetStore = create(
   persist(
@@ -141,17 +195,7 @@ export const useWidgetStore = create(
       },
 
       // Drag state
-      dragState: {
-        activeWidget: null,
-        startPosition: null,
-        currentPosition: null,
-        offset: { x: 0, y: 0 },
-        isDragging: false,
-        snapPreview: null,
-        collisionPreview: [],
-        simulatedPosition: null, // position used for transform-only during drag
-        rafPending: false,
-      },
+      dragState: { ...IDLE_DRAG_STATE },
 
       // Viewport info
       viewport: {
@@ -160,22 +204,13 @@ export const useWidgetStore = create(
         scoreArea: { x: 0, y: 0, width: 1920, height: 1016 },
       },
 
+      // Widget scale for the current score area (see getUiScale)
+      uiScale: 1,
+
       // Actions
       updateViewport: (viewport, scoreArea) => {
-        // If scoreArea is not provided, calculate it based on viewport
-        const calculatedScoreArea = scoreArea || {
-          x: 0,
-          y: 0,
-          width: viewport.width,
-          height: viewport.height,
-        };
-        
-        set({ 
-          viewport: { ...viewport, scoreArea: calculatedScoreArea } 
-        });
-        
-        // Reposition widgets that are out of bounds
-        get().repositionOutOfBoundsWidgets();
+        const area = scoreArea || { x: 0, y: 0, width: viewport.width, height: viewport.height };
+        set({ viewport: { ...viewport, scoreArea: area }, uiScale: getUiScale(area) });
       },
 
       // Widget management
@@ -196,10 +231,6 @@ export const useWidgetStore = create(
         });
       },
 
-      setWidgetPosition: (id, position) => {
-        get().updateWidget(id, { position });
-      },
-
       setWidgetSize: (id, size) => {
         const widget = get().getWidget(id);
         if (!widget || !widget.canResize) return;
@@ -211,11 +242,7 @@ export const useWidgetStore = create(
       toggleWidgetVisibility: (id) => {
         const widget = get().getWidget(id);
         if (!widget) return;
-
-        get().updateWidget(id, { 
-          isVisible: !widget.isVisible,
-          lastPosition: widget.isVisible ? widget.position : null,
-        });
+        get().updateWidget(id, { isVisible: !widget.isVisible });
       },
 
       toggleWidgetPin: (id) => {
@@ -239,256 +266,81 @@ export const useWidgetStore = create(
         get().updateWidget(id, { isVisible: false });
       },
 
+      // Widgets keep their anchor while hidden, so showing one puts it back in place
       showWidget: (id) => {
-        const widget = get().getWidget(id);
-        if (!widget) return;
-
-        const position = widget.lastPosition || get().findBestPosition(widget);
-        
-        get().updateWidget(id, { 
-          isVisible: true,
-          position,
-          lastPosition: null,
-        });
+        if (!get().getWidget(id)) return;
+        get().updateWidget(id, { isVisible: true });
       },
 
       bringToFront: (id) => {
         const { widgets } = get();
         const maxZ = Math.max(...Object.values(widgets).map(w => w.zIndex));
-        
+        if (widgets[id]?.zIndex === maxZ) return;
         get().updateWidget(id, { zIndex: maxZ + 1 });
       },
 
-      // Drag and drop system
-      startDrag: (id, startPosition, offset) => {
+      // Drag and drop system. Rects and points are in score-area px.
+      startDrag: (id, startRect, grabOffset) => {
         const widget = get().getWidget(id);
         if (!widget || widget.isPinned) return false;
 
         get().bringToFront(id);
-        
-        const simulated = {
-          x: widget.position.x,
-          y: widget.position.y,
-        };
-        
         set({
           dragState: {
+            ...IDLE_DRAG_STATE,
             activeWidget: id,
-            startPosition,
-            currentPosition: startPosition,
-            offset,
+            startRect,
+            grabOffset,
             isDragging: true,
-            snapPreview: null,
-            collisionPreview: [],
-            simulatedPosition: simulated,
-            rafPending: false,
+            simulatedPosition: { x: startRect.left, y: startRect.top },
           },
         });
-
-        // mark dragging in widget without persisting heavy changes
         get().updateWidget(id, { isDragging: true });
         return true;
       },
 
-      updateDrag: (currentPosition) => {
-        const { dragState } = get();
-        if (!dragState.isDragging || !dragState.activeWidget) return;
+      updateDrag: (point) => {
+        const { dragState, viewport, layoutSettings, magneticSettings } = get();
+        if (!dragState.isDragging || !dragState.startRect) return;
 
-        // Coalesce updates to next animation frame
-        if (dragState.rafPending) {
-          // update the latest pointer position only
-          set({ dragState: { ...dragState, currentPosition } });
-          return;
+        const { width, height } = dragState.startRect;
+        const area = viewport.scoreArea;
+        const pad = layoutSettings.scoreAreaPadding;
+        let x = clamp(point.x - dragState.grabOffset.x, pad, Math.max(pad, area.width - width - pad));
+        let y = clamp(point.y - dragState.grabOffset.y, pad, Math.max(pad, area.height - height - pad));
+
+        // Magnetic edges: pull to the padded edges and the horizontal centre
+        let snapPreview = null;
+        if (magneticSettings.enableMagneticSnap) {
+          const d = magneticSettings.snapDistance;
+          const right = area.width - width - pad;
+          const centre = (area.width - width) / 2;
+          const bottom = area.height - height - pad;
+          if (Math.abs(x - pad) < d) { x = pad; snapPreview = 'left'; }
+          else if (Math.abs(x - right) < d) { x = right; snapPreview = 'right'; }
+          else if (Math.abs(x - centre) < d) { x = centre; snapPreview = 'center'; }
+          if (Math.abs(y - pad) < d) { y = pad; snapPreview = snapPreview || 'top'; }
+          else if (Math.abs(y - bottom) < d) { y = bottom; snapPreview = snapPreview || 'bottom'; }
         }
 
-        set({ dragState: { ...dragState, currentPosition, rafPending: true } });
-
-        requestAnimationFrame(() => {
-          const state = get();
-          const ds = state.dragState;
-          if (!ds.isDragging || !ds.activeWidget || !ds.currentPosition) {
-            set({ dragState: { ...ds, rafPending: false } });
-            return;
-          }
-
-          const widget = state.getWidget(ds.activeWidget);
-          if (!widget) {
-            set({ dragState: { ...ds, rafPending: false } });
-            return;
-          }
-
-          // Calculate new position with offset
-          const nextPos = {
-            x: ds.currentPosition.x - ds.offset.x,
-            y: ds.currentPosition.y - ds.offset.y,
-          };
-
-          // Apply boundary constraints
-          const constrained = state.constrainToBounds(nextPos, widget.size);
-
-          // Magnetic snap preview
-          let finalPosition = constrained;
-          let snapPreview = null;
-          const { magneticSettings } = state;
-          if (magneticSettings.enableMagneticSnap) {
-            const snapResult = state.checkMagneticSnap(constrained, widget);
-            if (snapResult) {
-              finalPosition = snapResult.position;
-              snapPreview = snapResult.zone;
-            }
-          }
-
-          // Collisions (optional, still preview-only)
-          const collisionPreview = magneticSettings.enableCollisionDetection 
-            ? state.checkCollisions(finalPosition, widget)
-            : [];
-
-          // Update only drag state (simulated transform); do not persist widget.position now
-          set({
-            dragState: {
-              ...ds,
-              snapPreview,
-              collisionPreview,
-              simulatedPosition: finalPosition,
-              rafPending: false,
-            },
-          });
-        });
+        set({ dragState: { ...dragState, snapPreview, simulatedPosition: { x, y } } });
       },
 
       endDrag: () => {
-        const { dragState } = get();
+        const { dragState, viewport } = get();
         if (!dragState.isDragging || !dragState.activeWidget) return;
 
-        const widget = get().getWidget(dragState.activeWidget);
-        if (widget) {
-          // Commit final position (including snap)
-          const committed = dragState.simulatedPosition || widget.position;
-          get().setWidgetPosition(dragState.activeWidget, committed);
-
-          if (dragState.snapPreview) {
-            get().updateWidget(dragState.activeWidget, { snapZone: dragState.snapPreview });
-          }
-
-          get().updateWidget(dragState.activeWidget, { isDragging: false });
+        const { activeWidget, simulatedPosition, startRect } = dragState;
+        if (get().getWidget(activeWidget)) {
+          const moved = simulatedPosition
+            && (simulatedPosition.x !== startRect.left || simulatedPosition.y !== startRect.top);
+          const placement = moved
+            ? rectToPlacement({ left: simulatedPosition.x, top: simulatedPosition.y, width: startRect.width, height: startRect.height }, viewport.scoreArea)
+            : {};
+          get().updateWidget(activeWidget, { ...placement, isDragging: false });
         }
 
-        // Clear drag state
-        set({
-          dragState: {
-            activeWidget: null,
-            startPosition: null,
-            currentPosition: null,
-            offset: { x: 0, y: 0 },
-            isDragging: false,
-            snapPreview: null,
-            collisionPreview: [],
-            simulatedPosition: null,
-            rafPending: false,
-          },
-        });
-      },
-
-      // Magnetic snap system
-      checkMagneticSnap: (position, widget) => {
-        const { magneticSettings } = get(); // viewport removido: não utilizado
-        const { snapDistance, snapStrength } = magneticSettings;
-
-        let bestSnap = null;
-        let minDistance = snapDistance;
-
-        Object.entries(SNAP_ZONES).forEach(([zoneName]) => {
-          const zonePosition = get().getSnapZonePosition(zoneName, widget.size);
-          const distance = Math.sqrt(
-            Math.pow(position.x - zonePosition.x, 2) + 
-            Math.pow(position.y - zonePosition.y, 2)
-          );
-
-          if (distance < minDistance) {
-            minDistance = distance;
-            bestSnap = {
-              zone: zoneName,
-              position: {
-                x: position.x + (zonePosition.x - position.x) * snapStrength,
-                y: position.y + (zonePosition.y - position.y) * snapStrength,
-              },
-              distance,
-            };
-          }
-        });
-
-        return bestSnap;
-      },
-
-      getSnapZonePosition: (zoneName, widgetSize) => {
-        const { viewport } = get();
-        const zone = SNAP_ZONES[zoneName];
-        if (!zone) return { x: 0, y: 0 };
-
-        const { scoreArea } = viewport;
-        
-        // Safety check: if scoreArea is undefined, use viewport dimensions
-        const area = scoreArea || { width: viewport.width, height: viewport.height };
-        
-        return {
-          x: zone.x < 0 ? area.width + zone.x - widgetSize.width : zone.x,
-          y: zone.y < 0 ? area.height + zone.y - widgetSize.height : zone.y,
-        };
-      },
-
-      // Collision detection
-      checkCollisions: (position, widget) => {
-        const { widgets, layoutSettings } = get();
-        const collisions = [];
-
-        Object.values(widgets).forEach(otherWidget => {
-          if (otherWidget.id === widget.id || !otherWidget.isVisible || otherWidget.isMinimized) {
-            return;
-          }
-
-          const overlap = get().checkOverlap(
-            { ...position, ...widget.size },
-            { ...otherWidget.position, ...otherWidget.size },
-            layoutSettings.widgetMinDistance
-          );
-
-          if (overlap) {
-            collisions.push(otherWidget.id);
-          }
-        });
-
-        return collisions;
-      },
-
-      checkOverlap: (rect1, rect2, margin = 0) => {
-        return !(
-          rect1.x + rect1.width + margin < rect2.x ||
-          rect2.x + rect2.width + margin < rect1.x ||
-          rect1.y + rect1.height + margin < rect2.y ||
-          rect2.y + rect2.height + margin < rect1.y
-        );
-      },
-
-      // Utility functions
-      constrainToBounds: (position, size) => {
-        const { viewport, layoutSettings } = get();
-        const { scoreArea } = viewport;
-        
-        // Safety check: if scoreArea is undefined, use viewport dimensions
-        if (!scoreArea) {
-          const padding = layoutSettings.scoreAreaPadding;
-          return {
-            x: Math.max(padding, Math.min(position.x, viewport.width - size.width - padding)),
-            y: Math.max(padding, Math.min(position.y, viewport.height - size.height - padding)),
-          };
-        }
-        
-        const padding = layoutSettings.scoreAreaPadding;
-
-        return {
-          x: Math.max(padding, Math.min(position.x, scoreArea.width - size.width - padding)),
-          y: Math.max(padding, Math.min(position.y, scoreArea.height - size.height - padding)),
-        };
+        set({ dragState: { ...IDLE_DRAG_STATE } });
       },
 
       constrainSize: (size, minSize, maxSize) => {
@@ -498,47 +350,6 @@ export const useWidgetStore = create(
         };
       },
 
-      findBestPosition: (widget) => {
-        const { viewport } = get();
-        const { scoreArea } = viewport;
-        
-        // Safety check: if scoreArea is undefined, use viewport dimensions
-        const area = scoreArea || { width: viewport.width, height: viewport.height };
-        
-        // Try to find a position that doesn't overlap with other widgets
-        const attempts = [
-          { x: 20, y: 20 },
-          { x: area.width - widget.size.width - 20, y: 20 },
-          { x: 20, y: area.height - widget.size.height - 20 },
-          { x: area.width - widget.size.width - 20, y: area.height - widget.size.height - 20 },
-          { x: area.width / 2 - widget.size.width / 2, y: 20 },
-        ];
-
-        for (const position of attempts) {
-          const collisions = get().checkCollisions(position, widget);
-          if (collisions.length === 0) {
-            return position;
-          }
-        }
-
-        // If no good position found, return default
-        return { x: 20, y: 20 };
-      },
-
-      repositionOutOfBoundsWidgets: () => {
-        const { widgets } = get();
-        
-        Object.values(widgets).forEach(widget => {
-          if (!widget.isVisible) return;
-
-          const constrainedPosition = get().constrainToBounds(widget.position, widget.size);
-          
-          if (constrainedPosition.x !== widget.position.x || constrainedPosition.y !== widget.position.y) {
-            get().setWidgetPosition(widget.id, constrainedPosition);
-          }
-        });
-      },
-
       // Layout management
       saveLayout: (name) => {
         const { widgets } = get();
@@ -546,30 +357,20 @@ export const useWidgetStore = create(
           name,
           timestamp: new Date().toISOString(),
           widgets: Object.fromEntries(
-            Object.entries(widgets).map(([id, widget]) => [
-              id,
-              {
-                position: widget.position,
-                size: widget.size,
-                isVisible: widget.isVisible,
-                isPinned: widget.isPinned,
-                isMinimized: widget.isMinimized,
-                snapZone: widget.snapZone,
-              },
-            ])
+            Object.entries(widgets).map(([id, widget]) => [id, pickPersisted(widget)])
           ),
         };
 
         // Save to localStorage
         const savedLayouts = JSON.parse(localStorage.getItem('widget-layouts') || '[]');
         const existingIndex = savedLayouts.findIndex(l => l.name === name);
-        
+
         if (existingIndex >= 0) {
           savedLayouts[existingIndex] = layout;
         } else {
           savedLayouts.push(layout);
         }
-        
+
         localStorage.setItem('widget-layouts', JSON.stringify(savedLayouts));
         return layout;
       },
@@ -577,14 +378,15 @@ export const useWidgetStore = create(
       loadLayout: (name) => {
         const savedLayouts = JSON.parse(localStorage.getItem('widget-layouts') || '[]');
         const layout = savedLayouts.find(l => l.name === name);
-        
+
         if (!layout) return false;
 
         const { widgets } = get();
         const updatedWidgets = { ...widgets };
 
         Object.entries(layout.widgets).forEach(([id, savedWidget]) => {
-          if (updatedWidgets[id]) {
+          // Layouts saved before anchors existed only have x/y positions; skip those
+          if (updatedWidgets[id] && savedWidget.anchor) {
             updatedWidgets[id] = {
               ...updatedWidgets[id],
               ...savedWidget,
@@ -596,25 +398,19 @@ export const useWidgetStore = create(
         return true;
       },
 
+      // Puts every widget back in its default place and size (visibility is kept)
       resetLayout: () => {
         const { widgets } = get();
-        const resetWidgets = { ...widgets };
-
-        // Reset to default positions
-        resetWidgets.mediaControls.position = { x: 20, y: 20 };
-        resetWidgets.editingTools.position = { x: 20, y: 120 };
-        resetWidgets.properties.position = { x: -320, y: 20 };
-        resetWidgets.quickActions.position = { x: -200, y: -180 };
-
-        // Reset states
-        Object.values(resetWidgets).forEach(widget => {
-          widget.isVisible = true;
-          widget.isPinned = false;
-          widget.isMinimized = false;
-          widget.isDragging = false;
+        set({
+          widgets: Object.fromEntries(
+            Object.entries(widgets).map(([id, widget]) => {
+              const def = DEFAULT_WIDGETS[id];
+              return [id, def
+                ? { ...widget, anchor: def.anchor, offset: def.offset, size: def.size, isPinned: false, isMinimized: false, isDragging: false }
+                : widget];
+            })
+          ),
         });
-
-        set({ widgets: resetWidgets });
       },
 
       // Settings
@@ -656,44 +452,25 @@ export const useWidgetStore = create(
 
       // Debug helpers
       getDebugInfo: () => {
-        const { widgets, dragState, magneticSettings, viewport } = get();
+        const { widgets, dragState, magneticSettings, viewport, uiScale } = get();
         return {
           widgets: Object.fromEntries(
-            Object.entries(widgets).map(([id, widget]) => [
-              id,
-              {
-                position: widget.position,
-                size: widget.size,
-                isVisible: widget.isVisible,
-                isPinned: widget.isPinned,
-                snapZone: widget.snapZone,
-              },
-            ])
+            Object.entries(widgets).map(([id, widget]) => [id, pickPersisted(widget)])
           ),
           dragState,
           magneticSettings,
           viewport,
+          uiScale,
           stats: get().getStats(),
         };
       },
 
       // Missing methods for WidgetManager
       initializeDefaultWidgets: () => {
-        // Merge default metadata into any persisted widget state
-        const current = get().widgets || {};
-        const merged = Object.fromEntries(
-          Object.entries(DEFAULT_WIDGETS).map(([id, def]) => [
-            id,
-            {
-              ...def,
-              ...current[id], // persisted state overrides position/size/visibility
-            },
-          ])
-        );
-
         // Normalize sizes to be within min/max to avoid clipping
+        const { widgets } = get();
         const normalized = Object.fromEntries(
-          Object.entries(merged).map(([id, w]) => {
+          Object.entries(widgets).map(([id, w]) => {
             const def = DEFAULT_WIDGETS[id] || w;
             const size = get().constrainSize(w.size || def.size, def.minSize, def.maxSize);
             return [id, { ...w, size }];
@@ -701,35 +478,28 @@ export const useWidgetStore = create(
         );
 
         set({ widgets: normalized });
-        console.log('Widgets initialized');
       },
 
       hideAllWidgets: () => {
         const { widgets } = get();
-        const updatedWidgets = { ...widgets };
-        
-        Object.keys(updatedWidgets).forEach(id => {
-          // Hide all widgets regardless of canClose
-          updatedWidgets[id].isVisible = false;
+        set({
+          widgets: Object.fromEntries(
+            Object.entries(widgets).map(([id, w]) => [id, { ...w, isVisible: false }])
+          ),
         });
-        
-        set({ widgets: updatedWidgets });
       },
 
       showAllWidgets: () => {
         const { widgets } = get();
-        const updatedWidgets = { ...widgets };
-        
-        Object.keys(updatedWidgets).forEach(id => {
-          updatedWidgets[id].isVisible = true;
+        set({
+          widgets: Object.fromEntries(
+            Object.entries(widgets).map(([id, w]) => [id, { ...w, isVisible: true }])
+          ),
         });
-        
-        set({ widgets: updatedWidgets });
       },
 
       cleanup: () => {
         // Cleanup any event listeners or timers if needed
-        console.log('Widget store cleanup');
       },
 
       // Add configs property for compatibility
@@ -743,21 +513,32 @@ export const useWidgetStore = create(
     }),
     {
       name: 'music-editor-widget-store',
+      // v1: x/y positions replaced by anchor + offset
+      version: 1,
+      migrate: (persisted, version) => {
+        if (version < 1 && persisted?.widgets) {
+          persisted.widgets = Object.fromEntries(
+            Object.entries(persisted.widgets).map(([id, w]) => {
+              // eslint-disable-next-line no-unused-vars
+              const { position, snapZone, ...rest } = w;
+              return [id, rest];
+            })
+          );
+        }
+        return persisted;
+      },
+      // Persisted widgets only hold a few fields; lay them over the defaults so
+      // id/type/limits are always present, even before WidgetManager mounts.
+      merge: (persisted, current) => ({
+        ...current,
+        ...persisted,
+        widgets: Object.fromEntries(
+          Object.entries(DEFAULT_WIDGETS).map(([id, def]) => [id, { ...def, ...(persisted?.widgets?.[id] || {}) }])
+        ),
+      }),
       partialize: (state) => ({
         widgets: Object.fromEntries(
-          Object.entries(state.widgets).map(([id, widget]) => [
-            id,
-            {
-              // keep essential and display fields
-              title: widget.title,
-              position: widget.position,
-              size: widget.size,
-              isVisible: widget.isVisible,
-              isPinned: widget.isPinned,
-              isMinimized: widget.isMinimized,
-              snapZone: widget.snapZone,
-            },
-          ])
+          Object.entries(state.widgets).map(([id, widget]) => [id, pickPersisted(widget)])
         ),
         magneticSettings: state.magneticSettings,
         layoutSettings: state.layoutSettings,
@@ -766,4 +547,3 @@ export const useWidgetStore = create(
     }
   )
 );
-

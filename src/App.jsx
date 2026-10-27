@@ -52,7 +52,7 @@ function App() {
       <main 
         className="relative transition-all duration-300 ease-in-out"
         style={{
-          marginTop: headerVisible ? '64px' : '0px',
+          marginTop: headerVisible ? `${header.height ?? 64}px` : '0px',
           height: `${scoreAreaHeight}px`,
         }}
       >

@@ -10,7 +10,7 @@ import {
   X 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useWidgetStore } from '@/lib/stores/widget-store';
+import { useWidgetStore, getWidgetPlacement } from '@/lib/stores/widget-store';
 import { useAppStore } from '@/lib/stores/app-store';
 
 const MagneticWidget = ({ 
@@ -32,32 +32,46 @@ const MagneticWidget = ({
   const simulatedPosition = useWidgetStore((state) =>
     state.dragState.activeWidget === widgetId ? state.dragState.simulatedPosition : null
   );
+  const dragStart = useWidgetStore((state) =>
+    state.dragState.activeWidget === widgetId ? state.dragState.startRect : null
+  );
+  const scoreArea = useWidgetStore((state) => state.viewport.scoreArea);
+  const uiScale = useWidgetStore((state) => state.uiScale);
+  const padding = useWidgetStore((state) => state.layoutSettings.scoreAreaPadding);
 
   // Stable action methods (call directly from store to avoid subscribing to changes)
   const toggleWidgetPin = (id) => useWidgetStore.getState().toggleWidgetPin(id);
   const toggleWidgetMinimize = (id) => useWidgetStore.getState().toggleWidgetMinimize(id);
   const closeWidget = (id) => useWidgetStore.getState().closeWidget(id);
-  const bringToFront = (id) => useWidgetStore.getState().bringToFront(id);
   const startDrag = (id, start, offset) => useWidgetStore.getState().startDrag(id, start, offset);
   const updateDrag = (pos) => useWidgetStore.getState().updateDrag(pos);
   const endDrag = () => useWidgetStore.getState().endDrag();
   const toggleWidgetVisibility = (id) => useWidgetStore.getState().toggleWidgetVisibility(id);
 
-  const {
-    header,
-    showHeader,
-    toggleHeader,
-  } = useAppStore();
+  const headerVisible = useAppStore((state) => state.header.isVisible);
+  const showHeader = () => useAppStore.getState().showHeader();
+  const toggleHeader = () => useAppStore.getState().toggleHeader();
 
   useEffect(() => {
     const element = widgetRef.current;
     if (!element) return;
 
     let isDragging = false;
-    let startPos = { x: 0, y: 0 };
-    let offset = { x: 0, y: 0 };
 
     const isButton = (el) => !!el.closest('button, [role="button"], .no-drag');
+
+    // Pointer and widget rect in score-area coordinates (the overlay starts below the header)
+    const toArea = (clientX, clientY) => {
+      const area = element.parentElement.getBoundingClientRect();
+      return { x: clientX - area.left, y: clientY - area.top };
+    };
+    const beginDrag = (clientX, clientY) => {
+      const area = element.parentElement.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
+      const startRect = { left: rect.left - area.left, top: rect.top - area.top, width: rect.width, height: rect.height };
+      const grab = { x: clientX - rect.left, y: clientY - rect.top };
+      return startDrag(widgetId, startRect, grab);
+    };
 
     const handleMouseDown = (e) => {
       const w = useWidgetStore.getState().widgets[widgetId];
@@ -69,17 +83,8 @@ const MagneticWidget = ({
       e.preventDefault();
       e.stopPropagation();
 
-      const rect = element.getBoundingClientRect();
-      offset = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-
-      startPos = { x: e.clientX, y: e.clientY };
-
-      if (startDrag(widgetId, startPos, offset)) {
+      if (beginDrag(e.clientX, e.clientY)) {
         isDragging = true;
-        bringToFront(widgetId);
 
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
@@ -90,7 +95,7 @@ const MagneticWidget = ({
 
     const handleMouseMove = (e) => {
       if (!isDragging) return;
-      updateDrag({ x: e.clientX, y: e.clientY });
+      updateDrag(toArea(e.clientX, e.clientY));
     };
 
     const handleMouseUp = () => {
@@ -112,18 +117,8 @@ const MagneticWidget = ({
       e.preventDefault();
 
       const touch = e.touches[0];
-      const rect = element.getBoundingClientRect();
-
-      offset = {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top,
-      };
-
-      startPos = { x: touch.clientX, y: touch.clientY };
-
-      if (startDrag(widgetId, startPos, offset)) {
+      if (beginDrag(touch.clientX, touch.clientY)) {
         isDragging = true;
-        bringToFront(widgetId);
       }
     };
 
@@ -131,7 +126,7 @@ const MagneticWidget = ({
       if (!isDragging) return;
       e.preventDefault();
       const touch = e.touches[0];
-      updateDrag({ x: touch.clientX, y: touch.clientY });
+      updateDrag(toArea(touch.clientX, touch.clientY));
     };
 
     const handleTouchEnd = () => {
@@ -192,22 +187,17 @@ const MagneticWidget = ({
     toggleHeader();
   };
 
-  // Calculate position (handle negative values for right/bottom positioning)
-  const position = {
-    left: widget.position.x >= 0 ? widget.position.x : undefined,
-    right: widget.position.x < 0 ? Math.abs(widget.position.x) : undefined,
-    top: widget.position.y >= 0 ? widget.position.y : undefined,
-    bottom: widget.position.y < 0 ? Math.abs(widget.position.y) : undefined,
-  };
+  // Anchored to a corner/edge of the score area and scaled to the screen size
+  const placement = getWidgetPlacement(widget, scoreArea, uiScale, padding);
 
   const widgetClasses = [
     'magnetic-widget',
     'absolute bg-background/95',
     'border border-border/20 rounded-lg shadow-lg',
-    widget.isDragging ? 'transition-none will-change-transform' : 'transition-all duration-200 ease-out',
+    widget.isDragging ? 'will-change-transform' : '',
     'pointer-events-auto',
     'flex flex-col overflow-hidden',
-    widget.isDragging ? 'shadow-2xl scale-105 z-50' : '',
+    widget.isDragging ? 'shadow-2xl' : '',
     widget.isPinned ? 'ring-2 ring-primary/30' : '',
     widget.isMinimized ? 'h-auto' : '',
     snapPreview ? 'ring-2 ring-primary/50' : '',
@@ -221,21 +211,19 @@ const MagneticWidget = ({
     'select-none touch-none',
   ].filter(Boolean).join(' ');
 
-  // Translate while dragging to avoid mutating state per frame
-  const translateStyle = widget.isDragging && simulatedPosition
-    ? {
-        transform: `translate3d(${simulatedPosition.x - widget.position.x}px, ${simulatedPosition.y - widget.position.y}px, 0)`,
-        willChange: 'transform',
-      }
-    : { transform: 'translate3d(0,0,0)' };
+  // Translate while dragging; the anchor is only recomputed on drop
+  const dragTranslate = widget.isDragging && simulatedPosition && dragStart
+    ? `translate3d(${simulatedPosition.x - dragStart.left}px, ${simulatedPosition.y - dragStart.top}px, 0) `
+    : '';
 
   return (
     <div
       ref={widgetRef}
       className={widgetClasses}
       style={{
-        ...position,
-        ...translateStyle,
+        ...placement.style,
+        transform: dragTranslate + placement.transform,
+        transformOrigin: placement.transformOrigin,
         width: widget.size.width,
         height: widget.isMinimized ? 'auto' : widget.size.height,
         zIndex: widget.zIndex,
@@ -261,7 +249,7 @@ const MagneticWidget = ({
           {/* Controls marked as no-drag to avoid hijacking */}
           <div className="flex items-center gap-1 no-drag">
             {/* Header Control - Show when header is hidden and this is primary widget */}
-            {showHeaderControl && !header.isVisible && (
+            {showHeaderControl && !headerVisible && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -274,7 +262,7 @@ const MagneticWidget = ({
             )}
 
             {/* Header Control - Toggle when header is visible and this is primary widget */}
-            {showHeaderControl && header.isVisible && (
+            {showHeaderControl && headerVisible && (
               <Button
                 variant="ghost"
                 size="sm"
