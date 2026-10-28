@@ -1,27 +1,40 @@
-import React from 'react';
-import { 
-  Music, 
-  Clock, 
-  Volume2, 
-  Hash, 
-  Type,
-  Palette,
-  Settings
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
+import React, { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { Music, Clock, Settings, ListMusic, Ruler } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Slider } from '../ui/slider';
 import MagneticWidget from './MagneticWidget';
 import { useScoreStore } from '@/lib/stores/score-store';
-import EngravingSettingsPanel from './EngravingSettingsPanel';
+import { setPlaybackTempo, describePitch, describeDuration } from '@music-editor/score-viewer';
+import { useAppStore } from '@/lib/stores/app-store';
+
+// Text field that applies its value on Enter or when it loses focus (each apply
+// re-renders the score, so not on every keystroke)
+const CommitInput = ({ id, value, onCommit, placeholder }) => {
+  const [draft, setDraft] = useState(value || '');
+  useEffect(() => setDraft(value || ''), [value]);
+  const commit = (next) => { if (next !== (value || '')) onCommit(next); };
+  return (
+    <Input
+      id={id}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      className="h-7 text-xs"
+      placeholder={placeholder}
+    />
+  );
+};
+
+const ReadOnlyField = ({ label, value, hint }) => (
+  <div>
+    <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="h-7 flex items-center text-xs font-medium" title={hint}>{value}</div>
+  </div>
+);
 
 const PropertiesWidget = ({ widgetId }) => {
   const {
@@ -29,44 +42,32 @@ const PropertiesWidget = ({ widgetId }) => {
     metadata,
     viewSettings,
     updateViewSettings,
-  } = useScoreStore();
+    tempo,
+    setMetadata,
+    renderScore,
+  } = useScoreStore(useShallow((s) => ({
+    selection: s.selection,
+    metadata: s.metadata,
+    viewSettings: s.viewSettings,
+    updateViewSettings: s.updateViewSettings,
+    tempo: s.playbackState.tempo,
+    setMetadata: s.setMetadata,
+    renderScore: s.renderScore,
+  })));
 
-  const keySignatures = [
-    { value: 'C', label: 'Dó Maior' },
-    { value: 'G', label: 'Sol Maior' },
-    { value: 'D', label: 'Ré Maior' },
-    { value: 'A', label: 'Lá Maior' },
-    { value: 'E', label: 'Mi Maior' },
-    { value: 'B', label: 'Si Maior' },
-    { value: 'F#', label: 'Fá# Maior' },
-    { value: 'C#', label: 'Dó# Maior' },
-    { value: 'F', label: 'Fá Maior' },
-    { value: 'Bb', label: 'Sib Maior' },
-    { value: 'Eb', label: 'Mib Maior' },
-    { value: 'Ab', label: 'Láb Maior' },
-    { value: 'Db', label: 'Réb Maior' },
-    { value: 'Gb', label: 'Solb Maior' },
-    { value: 'Cb', label: 'Dób Maior' },
-  ];
-
-  const timeSignatures = [
-    { value: '4/4', label: '4/4' },
-    { value: '3/4', label: '3/4' },
-    { value: '2/4', label: '2/4' },
-    { value: '6/8', label: '6/8' },
-    { value: '9/8', label: '9/8' },
-    { value: '12/8', label: '12/8' },
-    { value: '2/2', label: '2/2' },
-    { value: '3/2', label: '3/2' },
-  ];
-
-  const handlePropertyChange = (property, value) => {
-    console.log('Property changed:', property, value);
-    // Here you would update the selected element's properties
+  // Title/composer are drawn by OSMD from the sheet, so change them there and re-render
+  const commitText = (field, value) => {
+    setMetadata({ ...(metadata || {}), [field]: value });
+    renderScore((osmd) => {
+      if (field === 'title') osmd.Sheet.TitleString = value;
+      if (field === 'composer') osmd.Sheet.ComposerString = value;
+    });
   };
 
-  const handleViewSettingChange = (setting, value) => {
-    updateViewSettings({ [setting]: value });
+  const toggleMeasureNumbers = () => {
+    const show = !viewSettings.showMeasureNumbers;
+    updateViewSettings({ showMeasureNumbers: show });
+    renderScore((osmd) => osmd.setOptions({ drawMeasureNumbers: show }));
   };
 
   const renderScoreProperties = () => (
@@ -79,155 +80,85 @@ const PropertiesWidget = ({ widgetId }) => {
       <div className="space-y-2">
         <div>
           <Label htmlFor="title" className="text-xs">Título</Label>
-          <Input
-            id="title"
-            value={metadata?.title || ''}
-            onChange={(e) => handlePropertyChange('title', e.target.value)}
-            className="h-7 text-xs"
-            placeholder="Título da partitura"
-          />
+          <CommitInput id="title" value={metadata?.title} onCommit={(v) => commitText('title', v)} placeholder="Título da partitura" />
         </div>
 
         <div>
           <Label htmlFor="composer" className="text-xs">Compositor</Label>
-          <Input
-            id="composer"
-            value={metadata?.composer || ''}
-            onChange={(e) => handlePropertyChange('composer', e.target.value)}
-            className="h-7 text-xs"
-            placeholder="Nome do compositor"
-          />
+          <CommitInput id="composer" value={metadata?.composer} onCommit={(v) => commitText('composer', v)} placeholder="Nome do compositor" />
+        </div>
+
+        {/* Changing key/time rewrites the music itself: that belongs to edit mode */}
+        <div className="grid grid-cols-2 gap-2">
+          <ReadOnlyField label="Tonalidade" value={metadata?.keySignature || '—'} hint="Alterar a tonalidade fica para o modo de edição" />
+          <ReadOnlyField label="Compasso" value={metadata?.timeSignature || '—'} hint="Alterar o compasso fica para o modo de edição" />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label htmlFor="key" className="text-xs">Tonalidade</Label>
-            <Select 
-              value={metadata?.keySignature || 'C'} 
-              onValueChange={(value) => handlePropertyChange('keySignature', value)}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {keySignatures.map((key) => (
-                  <SelectItem key={key.value} value={key.value}>
-                    {key.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="time" className="text-xs">Compasso</Label>
-            <Select 
-              value={metadata?.timeSignature || '4/4'} 
-              onValueChange={(value) => handlePropertyChange('timeSignature', value)}
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {timeSignatures.map((time) => (
-                  <SelectItem key={time.value} value={time.value}>
-                    {time.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="tempo" className="text-xs flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Tempo (BPM)
-          </Label>
-          <div className="flex items-center gap-2">
-            <Slider
-              value={[metadata?.tempo || 120]}
-              onValueChange={(value) => handlePropertyChange('tempo', value[0])}
-              min={60}
-              max={200}
-              step={1}
-              className="flex-1"
-            />
-            <span className="text-xs text-muted-foreground w-8">
-              {metadata?.tempo || 120}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderNoteProperties = () => (
-    <div className="space-y-3">
-      <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-        <Music className="w-3 h-3" />
-        Propriedades da Nota
-      </div>
-
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <Label className="text-xs">Altura</Label>
-            <Select defaultValue="C4">
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="C4">Dó4</SelectItem>
-                <SelectItem value="D4">Ré4</SelectItem>
-                <SelectItem value="E4">Mi4</SelectItem>
-                <SelectItem value="F4">Fá4</SelectItem>
-                <SelectItem value="G4">Sol4</SelectItem>
-                <SelectItem value="A4">Lá4</SelectItem>
-                <SelectItem value="B4">Si4</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label className="text-xs">Duração</Label>
-            <Select defaultValue="quarter">
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="whole">Semibreve</SelectItem>
-                <SelectItem value="half">Mínima</SelectItem>
-                <SelectItem value="quarter">Semínima</SelectItem>
-                <SelectItem value="eighth">Colcheia</SelectItem>
-                <SelectItem value="sixteenth">Semicolcheia</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <ReadOnlyField label="Compassos" value={metadata?.measures || '—'} />
+          <ReadOnlyField label="Instrumentos" value={metadata?.instruments?.join(', ') || '—'} />
         </div>
 
         <div>
           <Label className="text-xs flex items-center gap-1">
-            <Volume2 className="w-3 h-3" />
-            Dinâmica
+            <Clock className="w-3 h-3" />
+            Andamento de reprodução (BPM)
           </Label>
-          <Select defaultValue="mf">
-            <SelectTrigger className="h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pp">Pianissimo (pp)</SelectItem>
-              <SelectItem value="p">Piano (p)</SelectItem>
-              <SelectItem value="mp">Mezzo-piano (mp)</SelectItem>
-              <SelectItem value="mf">Mezzo-forte (mf)</SelectItem>
-              <SelectItem value="f">Forte (f)</SelectItem>
-              <SelectItem value="ff">Fortissimo (ff)</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Slider
+              value={[tempo]}
+              onValueChange={(value) => setPlaybackTempo(value[0])}
+              min={30}
+              max={300}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-xs text-muted-foreground w-8 tabular-nums">{tempo}</span>
+          </div>
+          {metadata?.tempo && metadata.tempo !== tempo && (
+            <button type="button" className="text-[10px] text-primary hover:underline" onClick={() => setPlaybackTempo(metadata.tempo)}>
+              Repor andamento da partitura ({metadata.tempo})
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
+
+  // Selected note(s) from a click on the score (Shift+click for a range); read-only until edit mode
+  const renderSelectionProperties = () => {
+    const notes = selection?.notes || [];
+    const first = notes[0];
+    const isRange = selection?.type === 'range';
+    return (
+      <div className="space-y-3">
+        <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <ListMusic className="w-3 h-3" />
+          {isRange ? 'Seleção' : 'Propriedades da Nota'}
+        </div>
+        {isRange ? (
+          <div className="grid grid-cols-2 gap-2">
+            <ReadOnlyField label="Notas" value={notes.filter((n) => !n.isRest?.()).length} />
+            <ReadOnlyField
+              label="Compassos"
+              value={selection.startMeasure === selection.endMeasure ? selection.startMeasure : `${selection.startMeasure}–${selection.endMeasure}`}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <ReadOnlyField
+              label="Altura"
+              value={notes.filter((n) => !n.isRest?.()).map(describePitch).join(' · ') || describePitch(first)}
+              hint="Altura escrita (como na partitura)"
+            />
+            <ReadOnlyField label="Duração" value={describeDuration(first)} />
+            <ReadOnlyField label="Compasso" value={selection.startMeasure} />
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground">Editar notas fica disponível no modo de edição.</p>
+      </div>
+    );
+  };
 
   const renderViewProperties = () => (
     <div className="space-y-3">
@@ -236,59 +167,16 @@ const PropertiesWidget = ({ widgetId }) => {
         Propriedades de Visualização
       </div>
 
-      <div className="space-y-2">
-        <div>
-          <Label className="text-xs">Modo de Visualização</Label>
-          <Select 
-            value={viewSettings.viewMode} 
-            onValueChange={(value) => handleViewSettingChange('viewMode', value)}
-          >
-            <SelectTrigger className="h-7 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="page">Página</SelectItem>
-              <SelectItem value="continuous">Contínuo</SelectItem>
-              <SelectItem value="horizontal">Horizontal</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Mostrar Números de Compasso</Label>
-          <Button
-            variant={viewSettings.showMeasureNumbers ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleViewSettingChange('showMeasureNumbers', !viewSettings.showMeasureNumbers)}
-            className="h-6 px-2 text-xs"
-          >
-            {viewSettings.showMeasureNumbers ? 'Sim' : 'Não'}
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Mostrar Números de Página</Label>
-          <Button
-            variant={viewSettings.showPageNumbers ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleViewSettingChange('showPageNumbers', !viewSettings.showPageNumbers)}
-            className="h-6 px-2 text-xs"
-          >
-            {viewSettings.showPageNumbers ? 'Sim' : 'Não'}
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label className="text-xs">Redimensionamento Automático</Label>
-          <Button
-            variant={viewSettings.autoResize ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleViewSettingChange('autoResize', !viewSettings.autoResize)}
-            className="h-6 px-2 text-xs"
-          >
-            {viewSettings.autoResize ? 'Sim' : 'Não'}
-          </Button>
-        </div>
+      <div className="flex items-center justify-between">
+        <Label className="text-xs">Mostrar Números de Compasso</Label>
+        <Button
+          variant={viewSettings.showMeasureNumbers ? 'default' : 'outline'}
+          size="sm"
+          onClick={toggleMeasureNumbers}
+          className="h-6 px-2 text-xs"
+        >
+          {viewSettings.showMeasureNumbers ? 'Sim' : 'Não'}
+        </Button>
       </div>
     </div>
   );
@@ -296,18 +184,16 @@ const PropertiesWidget = ({ widgetId }) => {
   return (
     <MagneticWidget widgetId={widgetId}>
       <div className="properties-content space-y-4">
-        {/* Render different property panels based on selection */}
-        {!selection && renderScoreProperties()}
-        {selection?.type === 'note' && renderNoteProperties()}
-        {selection?.type === 'measure' && renderScoreProperties()}
-        
-        {/* Always show view properties */}
+        {selection ? renderSelectionProperties() : renderScoreProperties()}
+
         <div className="border-t border-border/20 pt-3">
           {renderViewProperties()}
         </div>
-        {/* Engraving settings panel */}
         <div className="border-t border-border/20 pt-3">
-          <EngravingSettingsPanel />
+          <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => useAppStore.getState().openModal('formatting')}>
+            <Ruler className="w-3 h-3 mr-1" />
+            Formatação avançada
+          </Button>
         </div>
       </div>
     </MagneticWidget>
@@ -315,4 +201,3 @@ const PropertiesWidget = ({ widgetId }) => {
 };
 
 export default PropertiesWidget;
-

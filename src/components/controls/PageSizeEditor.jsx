@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,8 @@ const PageSizeEditor = () => {
   const [selectedPreset, setSelectedPreset] = useState('a4-portrait');
   const [customWidth, setCustomWidth] = useState(210);
   const [customHeight, setCustomHeight] = useState(297);
+  const [staffHeight, setStaffHeight] = useState(7); // default staff height in mm
+  const [symbolSize, setSymbolSize] = useState(pageSettings?.symbolSize || 1.0);
   const [unit, setUnit] = useState('mm');
   const [isApplying, setIsApplying] = useState(false);
   const [margins, setMargins] = useState({ topMm: 12, rightMm: 12, bottomMm: 14, leftMm: 12 });
@@ -37,7 +39,8 @@ const PageSizeEditor = () => {
       setCustomWidth(pageSettings.width || 210);
       setCustomHeight(pageSettings.height || 297);
       setUnit(pageSettings.unit || 'mm');
-      
+      setStaffHeight(pageSettings.staffHeight || 7);
+      setSymbolSize(pageSettings.symbolSize || 1.0);
       // Try to match a preset
       const matchingPreset = Object.entries(PAGE_PRESETS).find(([, preset]) => 
         preset.width === pageSettings.width && 
@@ -45,7 +48,6 @@ const PageSizeEditor = () => {
         preset.unit === pageSettings.unit
       );
       setSelectedPreset(matchingPreset ? matchingPreset[0] : 'custom');
-
       if (pageSettings.margins) setMargins(pageSettings.margins);
       setDirty(false);
     }
@@ -58,6 +60,7 @@ const PageSizeEditor = () => {
       pageSettings.width !== customWidth ||
       pageSettings.height !== customHeight ||
       pageSettings.unit !== unit ||
+      pageSettings.staffHeight !== staffHeight ||
       JSON.stringify(pageSettings.margins) !== JSON.stringify(margins) ||
       selectedPreset !== pageSettings.preset
     );
@@ -86,6 +89,8 @@ const PageSizeEditor = () => {
         unit,
         preset: selectedPreset,
         margins,
+        staffHeight,
+        symbolSize,
       });
       if (!result.ok) {
         console.error('Failed to apply page settings:', result.error);
@@ -143,8 +148,7 @@ const PageSizeEditor = () => {
         {/* Custom Dimensions */}
         <div className="space-y-3">
           <Label>Dimensions</Label>
-          
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Width</Label>
               <Input
@@ -173,8 +177,35 @@ const PageSizeEditor = () => {
                 step="1"
               />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Staff Height</Label>
+              <Input
+                type="number"
+                value={staffHeight}
+                onChange={(e) => {
+                  setStaffHeight(Number(e.target.value));
+                  setSelectedPreset('custom');
+                }}
+                min="4"
+                max="12"
+                step="0.1"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Symbol Size</Label>
+              <Input
+                type="number"
+                value={symbolSize}
+                onChange={(e) => {
+                  setSymbolSize(Number(e.target.value));
+                  setSelectedPreset('custom');
+                }}
+                min="0.5"
+                max="2.0"
+                step="0.05"
+              />
+            </div>
           </div>
-
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Unit</Label>
             <Select value={unit} onValueChange={(value) => {

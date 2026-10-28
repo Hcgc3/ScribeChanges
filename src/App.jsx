@@ -2,6 +2,10 @@ import React, { useEffect } from 'react';
 import Header from './components/layout/Header';
 import { ScoreViewer } from '@music-editor/score-viewer';
 import WidgetManager from './components/layout/WidgetManager';
+import FormattingPanel from './components/controls/FormattingPanel';
+import PalettePanel from './components/controls/PalettePanel';
+import NewScoreDialog from './components/layout/NewScoreDialog';
+import NoteInputToolbar from './components/controls/NoteInputToolbar';
 import { useAppStore } from './lib/stores/app-store';
 import { useScoreStore } from './lib/stores/score-store';
 import './App.css';
@@ -16,7 +20,11 @@ function App() {
     cleanup 
   } = useAppStore();
   
-  const { initialize: initializeScore, file } = useScoreStore();
+  // Narrow selections: the score store changes constantly (playback time, loading state)
+  const initializeScore = useScoreStore((s) => s.initialize);
+  const file = useScoreStore((s) => s.file);
+  const formattingOpen = useAppStore((s) => s.modals.formatting);
+  const palettesOpen = useScoreStore((s) => s.palettesOpen);
 
   // Initialize app
   useEffect(() => {
@@ -58,8 +66,13 @@ function App() {
       >
         {/* Score Viewer - Full area usage */}
         <div className="score-container h-full w-full relative">
-          <ScoreViewer />
+          <ScoreViewer onCreateNew={() => useAppStore.getState().openModal('newScore')} />
         </div>
+
+        {file && <NoteInputToolbar />}
+        {file && formattingOpen && <FormattingPanel />}
+        {file && palettesOpen && <PalettePanel />}
+        <NewScoreDialog />
 
         {/* Widgets apenas depois de ficheiro carregado */}
         {file && (
@@ -71,7 +84,7 @@ function App() {
 
       {/* Debug Info - Development only */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="fixed bottom-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono z-50">
+        <div className="fixed bottom-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono z-50 pointer-events-none">
           <div>Header: {header.isVisible ? 'Visible' : 'Hidden'} | Hovered: {header.isHovered ? 'Yes' : 'No'} | Pinned: {header.isPinned ? 'Yes' : 'No'}</div>
           <div>Score Height: {scoreAreaHeight}px | Theme: {theme}</div>
         </div>

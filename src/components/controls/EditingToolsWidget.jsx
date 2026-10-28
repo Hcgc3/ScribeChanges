@@ -14,21 +14,31 @@ import {
   Type,
   Hash
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '../ui/button';
 import { 
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+} from '../ui/select';
+import { TooltipProvider } from '../ui/tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import MagneticWidget from './MagneticWidget';
+import { ToolbarRoot, ToolbarGroup, ToolbarSeparator, ToolbarButton } from './WidgetToolbar';
+import { useWidgetOrientation } from '@/lib/stores/widget-store';
 import { useScoreStore } from '@/lib/stores/score-store';
 
 const EditingToolsWidget = ({ widgetId }) => {
   const [selectedTool, setSelectedTool] = useState('select');
   const [noteValue, setNoteValue] = useState('quarter');
+  const { orientation, tooltipSide } = useWidgetOrientation(widgetId);
 
   const {
     selection,
@@ -49,15 +59,18 @@ const EditingToolsWidget = ({ widgetId }) => {
   ];
 
   const noteValues = [
-    { value: 'whole', label: 'Semibreve' },
-    { value: 'half', label: 'Mínima' },
-    { value: 'quarter', label: 'Semínima' },
-    { value: 'eighth', label: 'Colcheia' },
-    { value: 'sixteenth', label: 'Semicolcheia' },
+    { value: 'whole', label: 'Semibreve', short: '1' },
+    { value: 'half', label: 'Mínima', short: '1/2' },
+    { value: 'quarter', label: 'Semínima', short: '1/4' },
+    { value: 'eighth', label: 'Colcheia', short: '1/8' },
+    { value: 'sixteenth', label: 'Semicolcheia', short: '1/16' },
   ];
 
   const handleToolSelect = (toolId) => {
     setSelectedTool(toolId);
+    // The note tool is note input (same as N); other tools leave it
+    if (toolId === 'note') useScoreStore.getState().startEditing();
+    else useScoreStore.getState().stopEditing();
     console.log('Tool selected:', toolId);
   };
 
@@ -100,46 +113,48 @@ const EditingToolsWidget = ({ widgetId }) => {
   const canRedo = editHistoryIndex < editHistory.length - 1;
   const hasSelection = !!selection;
 
+  const currentNote = noteValues.find((n) => n.value === noteValue);
+
   return (
     <MagneticWidget widgetId={widgetId}>
-      <div className="editing-tools-content space-y-3 overflow-hidden">
-        {/* Tool Selection */}
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Ferramenta</div>
-          <TooltipProvider>
-            <div className="grid grid-cols-4 gap-1">
-              {tools.map((tool) => {
-                const Icon = tool.icon;
-                const active = selectedTool === tool.id;
-                return (
-                  <Tooltip key={tool.id}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={active ? 'default' : 'ghost'}
-                        size="sm"
-                        onClick={() => handleToolSelect(tool.id)}
-                        className={`h-8 w-full p-0 flex items-center justify-center ${active ? '' : ''}`}
-                        title={tool.label}
-                      >
-                        <Icon className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      {tool.label}
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
-            </div>
-          </TooltipProvider>
-        </div>
+      <TooltipProvider>
+        <ToolbarRoot orientation={orientation}>
+          {/* Tool Selection */}
+          <ToolbarGroup orientation={orientation}>
+            {tools.map((tool) => (
+              <ToolbarButton
+                key={tool.id}
+                icon={tool.icon}
+                label={tool.label}
+                tooltipSide={tooltipSide}
+                active={selectedTool === tool.id}
+                onClick={() => handleToolSelect(tool.id)}
+              />
+            ))}
+          </ToolbarGroup>
 
-        {/* Note Value Selection (when note tool is selected) */}
-        {selectedTool === 'note' && (
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Valor da Nota</div>
+          {/* Note Value Selection (when note tool is selected) */}
+          {selectedTool === 'note' && (orientation === 'vertical' ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="w-8 h-8 p-0 text-[10px] font-medium" title={`Valor da nota: ${currentNote?.label}`}>
+                  {currentNote?.short}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side={tooltipSide} align="start">
+                <DropdownMenuRadioGroup value={noteValue} onValueChange={setNoteValue}>
+                  {noteValues.map((note) => (
+                    <DropdownMenuRadioItem key={note.value} value={note.value}>
+                      {note.label}
+                      <span className="ml-auto text-xs text-muted-foreground">{note.short}</span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
             <Select value={noteValue} onValueChange={setNoteValue}>
-              <SelectTrigger className="h-8 w-full">
+              <SelectTrigger className="h-8 w-32 ml-1" aria-label="Valor da nota">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -150,116 +165,38 @@ const EditingToolsWidget = ({ widgetId }) => {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
+          ))}
 
-        {/* Edit Actions */}
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Ações</div>
-          <div className="grid grid-cols-2 gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleUndo}
-              disabled={!canUndo}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Desfazer (Ctrl+Z)"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span className="text-xs truncate">Desfazer</span>
-            </Button>
+          <ToolbarSeparator orientation={orientation} />
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRedo}
-              disabled={!canRedo}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Refazer (Ctrl+Y)"
-            >
-              <RotateCw className="w-3 h-3" />
-              <span className="text-xs truncate">Refazer</span>
-            </Button>
+          {/* Edit Actions */}
+          <ToolbarGroup orientation={orientation}>
+            <ToolbarButton icon={RotateCcw} label="Desfazer" shortcut="Ctrl+Z" tooltipSide={tooltipSide} onClick={handleUndo} disabled={!canUndo} />
+            <ToolbarButton icon={RotateCw} label="Refazer" shortcut="Ctrl+Y" tooltipSide={tooltipSide} onClick={handleRedo} disabled={!canRedo} />
+          </ToolbarGroup>
+          <ToolbarGroup orientation={orientation}>
+            <ToolbarButton icon={Copy} label="Copiar" shortcut="Ctrl+C" tooltipSide={tooltipSide} onClick={handleCopy} disabled={!hasSelection} />
+            <ToolbarButton icon={Scissors} label="Cortar" shortcut="Ctrl+X" tooltipSide={tooltipSide} onClick={handleCut} disabled={!hasSelection} />
+            <ToolbarButton icon={Trash2} label="Eliminar" shortcut="Delete" tooltipSide={tooltipSide} onClick={handleDelete} disabled={!hasSelection} destructive />
+          </ToolbarGroup>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              disabled={!hasSelection}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Copiar (Ctrl+C)"
-            >
-              <Copy className="w-3 h-3" />
-              <span className="text-xs truncate">Copiar</span>
-            </Button>
+          <ToolbarSeparator orientation={orientation} />
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCut}
-              disabled={!hasSelection}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Cortar (Ctrl+X)"
-            >
-              <Scissors className="w-3 h-3" />
-              <span className="text-xs truncate">Cortar</span>
-            </Button>
+          {/* Measure Actions */}
+          <ToolbarGroup orientation={orientation}>
+            <ToolbarButton icon={Plus} label="Adicionar compasso" tooltipSide={tooltipSide} onClick={handleAddMeasure} />
+            <ToolbarButton icon={Minus} label="Remover compasso" tooltipSide={tooltipSide} onClick={handleRemoveMeasure} />
+          </ToolbarGroup>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDelete}
-              disabled={!hasSelection}
-              className="h-8 px-2 flex items-center gap-2 justify-start text-destructive hover:text-destructive"
-              title="Eliminar (Delete)"
-            >
-              <Trash2 className="w-3 h-3" />
-              <span className="text-xs truncate">Eliminar</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Measure Actions */}
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">Compassos</div>
-          <div className="grid grid-cols-2 gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleAddMeasure}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Adicionar Compasso"
-            >
-              <Plus className="w-3 h-3" />
-              <span className="text-xs truncate">Adicionar</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRemoveMeasure}
-              className="h-8 px-2 flex items-center gap-2 justify-start"
-              title="Remover Compasso"
-            >
-              <Minus className="w-3 h-3" />
-              <span className="text-xs truncate">Remover</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Selection Info */}
-        {hasSelection && (
-          <div className="pt-2 border-t border-border/20">
-            <div className="text-xs font-medium text-muted-foreground mb-1">Seleção</div>
-            <div className="text-xs text-muted-foreground">
-              Tipo: {selection.type}
-              {selection.startMeasure && (
-                <div>Compasso: {selection.startMeasure}</div>
-              )}
+          {/* Selection Info */}
+          {hasSelection && orientation === 'horizontal' && (
+            <div className="pl-2 text-xs text-muted-foreground whitespace-nowrap">
+              {selection.type}
+              {selection.startMeasure && ` · c. ${selection.startMeasure}`}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </ToolbarRoot>
+      </TooltipProvider>
     </MagneticWidget>
   );
 };

@@ -9,27 +9,52 @@ import {
   VolumeX,
   Repeat,
   Repeat1,
-  Shuffle
+  Timer,
+  SlidersHorizontal,
+  Waves,
+  Footprints,
+  Highlighter,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import MagneticWidget from './MagneticWidget';
+import { ToolbarRoot, ToolbarGroup, ToolbarSeparator, ToolbarButton } from './WidgetToolbar';
+import { useWidgetOrientation } from '@/lib/stores/widget-store';
+import { useShallow } from 'zustand/react/shallow';
 import { useScoreStore } from '@/lib/stores/score-store';
-import { initTone, isToneReady, loadToneSequence, startTransportFromBeginning, stopTransport, extractMidiData, forceResumeAudio } from '@music-editor/score-viewer';
+import {
+  forceResumeAudio,
+  togglePlayback,
+  stopPlayback,
+  seekMeasure,
+  seekToSeconds,
+  setPlaybackTempo,
+  setPlaybackVolume,
+  togglePlaybackLoop,
+  setPlayheadMode,
+  setHighlightPlayingNotes,
+} from '@music-editor/score-viewer';
 
 const MediaControlsWidget = () => {
+  const { orientation, tooltipSide } = useWidgetOrientation('mediaControls');
   const {
     playbackState,
-    play,
-    pause,
-    stop,
-    setCurrentTime,
-    setTempo,
-    setVolume,
-    toggleLoop,
     metronome,
     toggleMetronome,
-  } = useScoreStore();
+    hasScore,
+    selection,
+    playheadMode,
+    highlightPlaying,
+  } = useScoreStore(useShallow((s) => ({
+    playbackState: s.playbackState,
+    metronome: s.metronome,
+    toggleMetronome: s.toggleMetronome,
+    hasScore: !!s.osmdInstance,
+    selection: s.selection,
+    playheadMode: s.viewSettings.playheadMode ?? 'smooth',
+    highlightPlaying: s.viewSettings.highlightPlayingNotes ?? true,
+  })));
 
   const {
     isPlaying,
@@ -39,67 +64,27 @@ const MediaControlsWidget = () => {
     tempo,
     volume,
     loop,
+    loopStart,
+    loopEnd,
   } = playbackState;
 
-  const handlePlayCore = useCallback(async () => {
-    try {
-      if (!isToneReady()) {
-        await initTone();
-      }
-      play();
-      const { osmdInstance, metadata } = useScoreStore.getState();
-      if (osmdInstance) {
-        const midiData = extractMidiData(osmdInstance, { tempo: metadata?.tempo, rawXML: osmdInstance.rawMusicXML });
-        console.log('[MIDI Extract] events:', midiData.events.length, midiData.events.slice(0,5));
-        await loadToneSequence({
-          events: midiData.events,
-          tempo: midiData.tempo,
-          tempoEvents: midiData.tempoEvents,
-          measureStartWholes: midiData.measureStartWholes
-        });
-        await startTransportFromBeginning();
-      }
-    } catch (e) {
-      console.warn('Playback init failed', e);
-    }
-  }, [play]);
-
   const unlockAudio = useCallback(() => {
-    try {
-      // Synchronous attempt (no await) to satisfy gesture requirement
-      forceResumeAudio();
-    } catch {}
+    // Synchronous attempt (no await) inside the gesture, before the async start
+    forceResumeAudio().catch(() => {});
   }, []);
 
-  const handlePlayPause = () => {
-    if (isPlaying) {
-      pause();
-      stopTransport();
-      return;
-    }
-    // Kick off async logic after synchronous unlock
-    handlePlayCore();
-  };
+  const handlePlayPause = () => togglePlayback();
+  const handleStop = () => stopPlayback();
+  const handleProgressChange = (value) => seekToSeconds(value[0]);
+  const handleTempoChange = (value) => setPlaybackTempo(value[0]);
+  const handleVolumeChange = (value) => setPlaybackVolume(value[0] / 100);
+  const handleVolumeToggle = () => setPlaybackVolume(volume > 0 ? 0 : 0.8);
 
-  const handleStop = () => {
-    stop();
-  };
-
-  const handleProgressChange = (value) => {
-    setCurrentTime(value[0]);
-  };
-
-  const handleTempoChange = (value) => {
-    setTempo(value[0]);
-  };
-
-  const handleVolumeChange = (value) => {
-    setVolume(value[0] / 100);
-  };
-
-  const handleVolumeToggle = () => {
-    setVolume(volume > 0 ? 0 : 0.8);
-  };
+  // Loop label: a range ("c. 3–5") when looping part of the piece
+  const loopRange = loop && loopStart != null && loopEnd != null && loopEnd > loopStart;
+  const loopLabel = loop
+    ? (loopRange && selection?.startMeasure ? `Loop: c. ${selection.startMeasure}–${selection.endMeasure}` : 'Loop: partitura inteira')
+    : (selection?.type === 'range' ? `Repetir c. ${selection.startMeasure}–${selection.endMeasure}` : 'Repetir tudo');
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -107,154 +92,124 @@ const MediaControlsWidget = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const transport = (
+    <ToolbarGroup orientation={orientation}>
+      <ToolbarButton
+        icon={isPlaying ? Pause : Play}
+        label={isPlaying ? 'Pausa' : 'Reproduzir'}
+        shortcut={selection ? `Espaço · começa no c. ${selection.startMeasure}` : 'Espaço'}
+        disabled={!hasScore}
+        tooltipSide={tooltipSide}
+        primary
+        iconClassName={isPlaying ? 'w-5 h-5' : 'w-5 h-5 ml-0.5'}
+        onPointerDown={unlockAudio}
+        onClick={handlePlayPause}
+      />
+      <ToolbarButton icon={Square} label="Parar" tooltipSide={tooltipSide} onClick={handleStop} disabled={!isPlaying && !isPaused} />
+      <ToolbarButton icon={SkipBack} label="Compasso anterior" tooltipSide={tooltipSide} onClick={() => seekMeasure(-1)} disabled={!hasScore} />
+      <ToolbarButton icon={SkipForward} label="Compasso seguinte" tooltipSide={tooltipSide} onClick={() => seekMeasure(1)} disabled={!hasScore} />
+      <ToolbarButton icon={loopRange ? Repeat1 : Repeat} label={loopLabel} shortcut="Shift+clique nas notas escolhe o intervalo" tooltipSide={tooltipSide} active={loop} onClick={togglePlaybackLoop} disabled={!hasScore} />
+    </ToolbarGroup>
+  );
+
+  const smooth = playheadMode === 'smooth';
+  const viewButtons = (
+    <ToolbarGroup orientation={orientation}>
+      <ToolbarButton
+        icon={smooth ? Waves : Footprints}
+        label={smooth ? 'Linha contínua' : 'Linha aos saltos'}
+        shortcut={smooth ? 'Clique: saltar de nota em nota' : 'Clique: deslizar com o áudio'}
+        tooltipSide={tooltipSide}
+        onClick={() => setPlayheadMode(smooth ? 'step' : 'smooth')}
+      />
+      <ToolbarButton
+        icon={Highlighter}
+        label={highlightPlaying ? 'Destaque das notas: ligado' : 'Destaque das notas: desligado'}
+        tooltipSide={tooltipSide}
+        active={highlightPlaying}
+        onClick={() => setHighlightPlayingNotes(!highlightPlaying)}
+      />
+    </ToolbarGroup>
+  );
+
+  const metronomeButton = (
+    <ToolbarButton icon={Timer} label="Metrónomo" tooltipSide={tooltipSide} active={metronome.enabled} onClick={toggleMetronome} />
+  );
+
+  const volumeSlider = (
+    <Slider value={[volume * 100]} onValueChange={handleVolumeChange} max={100} step={1} className="w-16" aria-label="Volume" />
+  );
+
+  const tempoSlider = (
+    <Slider value={[tempo]} onValueChange={handleTempoChange} min={30} max={300} step={1} className="w-16" aria-label="Tempo" />
+  );
+
   return (
     <MagneticWidget widgetId="mediaControls" showHeaderControl={true}>
-      <div className="media-controls-content space-y-3">
-        {/* Main Controls */}
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleStop}
-            disabled={!isPlaying && !isPaused}
-            className="w-8 h-8 p-0"
-          >
-            <Square className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-8 h-8 p-0"
-            disabled
-          >
-            <SkipBack className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="default"
-            size="sm"
-            onPointerDown={unlockAudio}
-            onClick={handlePlayPause}
-            className="w-10 h-10 p-0 bg-primary hover:bg-primary/90"
-          >
-            {isPlaying ? (
-              <Pause className="w-5 h-5" />
-            ) : (
-              <Play className="w-5 h-5 ml-0.5" />
-            )}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-8 h-8 p-0"
-            disabled
-          >
-            <SkipForward className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleLoop}
-            className={`w-8 h-8 p-0 ${loop ? 'text-primary' : ''}`}
-          >
-            {loop ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
-          </Button>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-          <Slider
-            value={[currentTime]}
-            onValueChange={handleProgressChange}
-            max={duration || 100}
-            step={0.1}
-            className="w-full"
-            disabled={!duration}
-          />
-        </div>
-
-        {/* Secondary Controls */}
-        <div className="flex items-center justify-between">
-          {/* Volume Control */}
-          <div className="flex items-center gap-2 flex-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleVolumeToggle}
-              className="w-6 h-6 p-0"
-            >
-              {volume === 0 ? (
-                <VolumeX className="w-4 h-4" />
-              ) : (
-                <Volume2 className="w-4 h-4" />
-              )}
-            </Button>
-            <Slider
-              value={[volume * 100]}
-              onValueChange={handleVolumeChange}
-              max={100}
-              step={1}
-              className="w-16"
-            />
-            <span className="text-xs text-muted-foreground w-8">
-              {Math.round(volume * 100)}%
-            </span>
-          </div>
-
-          {/* Tempo Control */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">BPM:</span>
-            <Slider
-              value={[tempo]}
-              onValueChange={handleTempoChange}
-              min={60}
-              max={200}
-              step={1}
-              className="w-16"
-            />
-            <span className="text-xs text-muted-foreground w-8">
-              {tempo}
-            </span>
-          </div>
-        </div>
-
-        {/* Metronome */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/20">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleMetronome}
-              className={`text-xs ${metronome.enabled ? 'text-primary' : ''}`}
-            >
-              Metrónomo
-            </Button>
-          </div>
-          
-          {metronome.enabled && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Vol:</span>
+      <TooltipProvider>
+        {orientation === 'vertical' ? (
+          <ToolbarRoot orientation="vertical">
+            {transport}
+            <ToolbarSeparator orientation="vertical" />
+            <ToolbarGroup orientation="vertical">
+              <ToolbarButton icon={volume === 0 ? VolumeX : Volume2} label={volume === 0 ? 'Ativar som' : 'Silenciar'} tooltipSide={tooltipSide} onClick={handleVolumeToggle} />
+              {metronomeButton}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <ToolbarButton icon={SlidersHorizontal} label="Volume e andamento" tooltipSide={tooltipSide} />
+                </PopoverTrigger>
+                <PopoverContent side={tooltipSide} className="w-56 space-y-3 p-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-12">Volume</span>
+                    <Slider value={[volume * 100]} onValueChange={handleVolumeChange} max={100} step={1} className="flex-1" aria-label="Volume" />
+                    <span className="w-8 text-right tabular-nums">{Math.round(volume * 100)}%</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-12">BPM</span>
+                    <Slider value={[tempo]} onValueChange={handleTempoChange} min={30} max={300} step={1} className="flex-1" aria-label="Tempo" />
+                    <span className="w-8 text-right tabular-nums">{tempo}</span>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </ToolbarGroup>
+            <ToolbarSeparator orientation="vertical" />
+            {viewButtons}
+            <ToolbarSeparator orientation="vertical" />
+            <span className="text-[10px] leading-none text-muted-foreground tabular-nums pb-0.5">{formatTime(currentTime)}</span>
+          </ToolbarRoot>
+        ) : (
+          <ToolbarRoot orientation="horizontal" className="px-1">
+            {transport}
+            <ToolbarSeparator orientation="horizontal" />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+              <span>{formatTime(currentTime)}</span>
               <Slider
-                value={[metronome.volume * 100]}
-                onValueChange={(value) => {
-                  // Update metronome volume
-                  console.log('Metronome volume:', value[0]);
-                }}
-                max={100}
-                step={1}
-                className="w-12"
+                value={[currentTime]}
+                onValueChange={handleProgressChange}
+                max={duration || 100}
+                step={0.1}
+                className="w-40"
+                disabled={!duration}
+                aria-label="Posição"
               />
+              <span>{formatTime(duration)}</span>
             </div>
-          )}
-        </div>
-      </div>
+            <ToolbarSeparator orientation="horizontal" />
+            <div className="flex items-center gap-1">
+              <ToolbarButton icon={volume === 0 ? VolumeX : Volume2} label={volume === 0 ? 'Ativar som' : 'Silenciar'} tooltipSide={tooltipSide} onClick={handleVolumeToggle} />
+              {volumeSlider}
+            </div>
+            <div className="flex items-center gap-2 pl-2 text-xs text-muted-foreground tabular-nums">
+              <span>BPM</span>
+              {tempoSlider}
+              <span className="w-7">{tempo}</span>
+            </div>
+            {metronomeButton}
+            <ToolbarSeparator orientation="horizontal" />
+            {viewButtons}
+          </ToolbarRoot>
+        )}
+      </TooltipProvider>
     </MagneticWidget>
   );
 };

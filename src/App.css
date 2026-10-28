@@ -24,6 +24,12 @@
   --popover: 0 0% 100%;                  /* #ffffff */
   --popover-foreground: 0 0% 10%;        /* #1a1a1a */
   
+  /* Voices 1-4 (note input, voice buttons): selection blue, playback amber, destructive red, muted grey */
+  --voice-1: 221 83% 53%;                /* #2563eb */
+  --voice-2: 38 92% 50%;                 /* #f59e0b */
+  --voice-3: 0 72% 51%;                  /* #dc2626 */
+  --voice-4: 210 9% 45%;                 /* ~#6c757d */
+
   /* Header system */
   --header-height: 64px;
   --header-animation-duration: 300ms;
@@ -191,8 +197,9 @@ body {
 
 .magnetic-widget {
   pointer-events: auto;
-  background: hsl(var(--background) / 0.95);
-  backdrop-filter: blur(8px);
+  /* Opaque, no backdrop blur: re-blurring the score under every widget after each
+     render cost 2-4 s per frame */
+  background: hsl(var(--background));
   border: 1px solid hsl(var(--border) / 0.2);
   border-radius: var(--radius);
   box-shadow: var(--widget-shadow);
@@ -594,3 +601,9 @@ body {
   }
 }
 
+
+/* Palette symbols (Unicode musical symbols) */
+.palette-glyph {
+  font-family: 'Noto Music', 'Bravura Text', 'Apple Symbols', serif;
+  font-size: 22px;
+}

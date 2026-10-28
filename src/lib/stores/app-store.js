@@ -41,6 +41,8 @@ export const useAppStore = create(
         help: false,
         export: false,
         share: false,
+        formatting: false, // advanced score formatting panel
+        newScore: false, // "Nova partitura" dialog
       },
       
       // Recent files

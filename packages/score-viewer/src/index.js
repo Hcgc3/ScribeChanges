@@ -9,6 +9,12 @@ export * from './hooks/useEditMode.js';
 export * from './hooks/useMusicalAnalysis.js';
 export * from './lib/tonePlayer.js';
 export * from './lib/osmdMidiExtractor.js';
+export * from './lib/playbackTimeline.js';
+export * from './lib/playbackEngine.js';
+export * from './lib/scoreInfo.js';
+export * from './lib/scoreFormatting.js';
+export * from './lib/newScore.js';
+export * from './lib/scoreFile.js';
 
 // Note: import the styles via side-effect in your app if needed:
 // import '@music-editor/score-viewer/styles/score.css';

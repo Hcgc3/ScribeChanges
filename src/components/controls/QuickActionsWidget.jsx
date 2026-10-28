@@ -15,18 +15,15 @@ import {
   Maximize2,
   Settings
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { 
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { TooltipProvider } from '../ui/tooltip';
 import MagneticWidget from './MagneticWidget';
-import { useScoreStore } from '@/lib/stores/score-store';
+import { ToolbarRoot, ToolbarGroup, ToolbarSection, ToolbarSeparator, ToolbarButton } from './WidgetToolbar';
+import { useWidgetOrientation } from '@/lib/stores/widget-store';
+import { useScoreStore } from '../../lib/stores/score-store';
 import { useAppStore } from '@/lib/stores/app-store';
 
 const QuickActionsWidget = ({ widgetId }) => {
+  const { orientation, tooltipSide } = useWidgetOrientation(widgetId);
   const {
     file,
     selection,
@@ -138,6 +135,7 @@ const QuickActionsWidget = ({ widgetId }) => {
     {
       id: 'zoom-reset',
       label: 'Zoom 100%',
+      short: '100%',
       icon: RotateCcw,
       shortcut: 'Ctrl+0',
       action: resetZoom,
@@ -147,6 +145,7 @@ const QuickActionsWidget = ({ widgetId }) => {
     {
       id: 'fullscreen',
       label: 'Ecrã Completo',
+      short: 'Ecrã',
       icon: Maximize2,
       shortcut: 'F11',
       action: toggleFullscreen,
@@ -175,68 +174,46 @@ const QuickActionsWidget = ({ widgetId }) => {
     }
   };
 
+  const vertical = orientation === 'vertical';
+
   return (
     <MagneticWidget widgetId={widgetId}>
-      <div className="quick-actions-content">
-        <TooltipProvider>
-          <div className="space-y-3">
-            {Object.entries(groupedActions).map(([categoryId, actions]) => {
-              const category = categories[categoryId];
-              return (
-                <div key={categoryId} className="space-y-2">
-                  <div className={`text-xs font-medium ${category.color}`}>
-                    {category.label}
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {actions.map((action) => {
-                      const Icon = action.icon;
-                      return (
-                        <Tooltip key={action.id}>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleAction(action)}
-                              disabled={action.disabled}
-                              className="h-8 p-1 flex flex-col items-center gap-1 hover:bg-primary/10"
-                            >
-                              <Icon className="w-3 h-3" />
-                              <span className="text-xs leading-none">
-                                {action.label}
-                              </span>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs">
-                            <div>{action.label}</div>
-                            {action.shortcut && (
-                              <div className="text-muted-foreground">
-                                {action.shortcut}
-                              </div>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+      <TooltipProvider>
+        <ToolbarRoot orientation={orientation} className={vertical ? '' : 'items-start px-1'}>
+          {Object.entries(groupedActions).map(([categoryId, actions], index) => {
+            const buttons = actions.map((action) => (
+              <ToolbarButton
+                key={action.id}
+                icon={action.icon}
+                label={vertical ? `${action.label} · ${categories[categoryId].label}` : action.label}
+                caption={vertical ? undefined : action.short || action.label}
+                shortcut={action.shortcut}
+                tooltipSide={tooltipSide}
+                onClick={() => handleAction(action)}
+                disabled={action.disabled}
+              />
+            ));
+            return (
+              <React.Fragment key={categoryId}>
+                {index > 0 && <ToolbarSeparator orientation={orientation} />}
+                {vertical
+                  ? <ToolbarGroup orientation="vertical">{buttons}</ToolbarGroup>
+                  : <ToolbarSection caption={categories[categoryId].label}>{buttons}</ToolbarSection>}
+              </React.Fragment>
+            );
+          })}
 
-            {/* Quick Settings */}
-            <div className="pt-2 border-t border-border/20">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => openModal('settings')}
-                className="w-full h-8 flex items-center gap-2 justify-start"
-              >
-                <Settings className="w-3 h-3" />
-                <span className="text-xs">Configurações</span>
-              </Button>
-            </div>
-          </div>
-        </TooltipProvider>
-      </div>
+          {/* Quick Settings */}
+          <ToolbarSeparator orientation={orientation} />
+          {vertical ? (
+            <ToolbarButton icon={Settings} label="Configurações" tooltipSide={tooltipSide} onClick={() => openModal('settings')} />
+          ) : (
+            <ToolbarSection caption="Geral">
+              <ToolbarButton icon={Settings} label="Configurações" caption="Definições" tooltipSide={tooltipSide} onClick={() => openModal('settings')} />
+            </ToolbarSection>
+          )}
+        </ToolbarRoot>
+      </TooltipProvider>
     </MagneticWidget>
   );
 };

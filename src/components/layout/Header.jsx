@@ -13,12 +13,15 @@ import {
   Lock,
   Unlock
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '../ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -45,10 +48,32 @@ const Header = () => {
   } = useAppStore();
 
   const { widgets, toggleWidgetVisibility, hideAllWidgets, showAllWidgets, resetLayout } = useWidgetStore();
-  const { viewSettings, toggleLockView } = useScoreStore();
+  // Narrow selections: the score store changes constantly (playback time, loading state)
+  const lockView = useScoreStore((s) => s.viewSettings.lockView);
+  const viewMode = useScoreStore((s) => (s.viewSettings.viewMode === 'continuous' ? 'continuous' : 'page'));
+  const toggleLockView = useScoreStore((s) => s.toggleLockView);
 
   const [widgetsDialogOpen, setWidgetsDialogOpen] = useState(false);
   const headerRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Ficheiro > Abrir (Cmd/Ctrl+O): another score can be opened at any time
+  const openFile = () => fileInputRef.current?.click();
+  const onFilePicked = (e) => {
+    const picked = e.target.files?.[0];
+    e.target.value = ''; // the same file can be picked again
+    if (picked) useScoreStore.getState().loadScore(picked);
+  };
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   const hoverZoneRef = useRef(null);
 
   const breakpoint = getBreakpoint();
@@ -174,10 +199,9 @@ const Header = () => {
     openModal('settings');
   };
 
-  // Calculate header classes and styles
   const headerClasses = [
     'fixed top-0 left-0 right-0 z-50',
-    'bg-background/95 backdrop-blur-sm',
+    'bg-background', // no backdrop blur: it repainted the score behind on every render
     'border-b border-border/20',
     'transition-all duration-300 ease-in-out',
     header.isVisible || header.isHovered ? 'translate-y-0' : '-translate-y-full',
@@ -186,7 +210,7 @@ const Header = () => {
 
   const overlayClasses = [
     'fixed inset-0 z-40',
-    'bg-black/10 backdrop-blur-[1px]',
+    'bg-black/10', // no backdrop blur: full-screen, it repainted the score on every render
     'transition-opacity duration-200',
     'pointer-events-none',
     header.isHovered && !header.isPinned ? 'opacity-100' : 'opacity-0',
@@ -203,6 +227,8 @@ const Header = () => {
 
       {/* Header Overlay - Semi-transparent background when hovering */}
       <div className={overlayClasses} />
+
+      <input ref={fileInputRef} type="file" accept=".xml,.musicxml,.mxl" className="hidden" onChange={onFilePicked} />
 
       {/* Main Header */}
       <header ref={headerRef} className={headerClasses}>
@@ -229,9 +255,9 @@ const Header = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    <DropdownMenuItem>Novo</DropdownMenuItem>
-                    <DropdownMenuItem>Abrir</DropdownMenuItem>
-                    <DropdownMenuItem>Guardar</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => openModal('newScore')}>Novo…</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={openFile}>Abrir…</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().downloadMusicXml()}>Guardar (MusicXML)</DropdownMenuItem>
                     <DropdownMenuItem>Guardar Como</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleExport}>
@@ -248,12 +274,20 @@ const Header = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    <DropdownMenuItem>Desfazer</DropdownMenuItem>
-                    <DropdownMenuItem>Refazer</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().toggleEditing()}>
+                      Entrada de notas
+                      <span className="ml-auto pl-6 text-xs text-muted-foreground">N</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().undoEdit()}>Desfazer</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().redoEdit()}>Refazer</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem>Copiar</DropdownMenuItem>
                     <DropdownMenuItem>Cortar</DropdownMenuItem>
                     <DropdownMenuItem>Colar</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => openModal('formatting')}>Formatação…</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().resetAllFormatting()}>Repor formatação padrão</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -268,10 +302,19 @@ const Header = () => {
                       <Maximize2 className="w-4 h-4 mr-2" />
                       Ecrã Completo
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().togglePalettes()}>
+                      Paletas
+                      <DropdownMenuShortcut>F9</DropdownMenuShortcut>
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem>Zoom In</DropdownMenuItem>
-                    <DropdownMenuItem>Zoom Out</DropdownMenuItem>
-                    <DropdownMenuItem>Zoom 100%</DropdownMenuItem>
+                    <DropdownMenuRadioGroup value={viewMode} onValueChange={(mode) => useScoreStore.getState().setViewMode(mode)}>
+                      <DropdownMenuRadioItem value="page">Modo página</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="continuous">Modo contínuo</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().zoomIn()}>Zoom In</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().zoomOut()}>Zoom Out</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => useScoreStore.getState().resetZoom()}>Zoom 100%</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -330,9 +373,9 @@ const Header = () => {
               size="sm"
               onClick={toggleLockView}
               className="w-9 h-9 p-0"
-              title={`Alternar para ${viewSettings.lockView ? 'Horizontal Mode' : 'Vertical Mode'}`}
+              title={`Alternar para ${lockView ? 'Horizontal Mode' : 'Vertical Mode'}`}
             >
-              {viewSettings.lockView ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+              {lockView ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
             </Button>
 
             {/* Header Controls */}
@@ -384,7 +427,7 @@ const Header = () => {
               <Button variant="ghost" size="sm" className="text-xs">
                 Ficheiro
               </Button>
-              <Button variant="ghost" size="sm" className="text-xs">
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => openModal('formatting')}>
                 Editar
               </Button>
               <Button variant="ghost" size="sm" className="text-xs">

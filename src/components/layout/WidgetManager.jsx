@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useWidgetStore } from '@/lib/stores/widget-store';
+import { useWidgetStore } from '../../lib/stores/widget-store';
 import MediaControlsWidget from '../controls/MediaControlsWidget';
 import EditingToolsWidget from '../controls/EditingToolsWidget';
 import PropertiesWidget from '../controls/PropertiesWidget';
@@ -27,6 +27,14 @@ const WidgetManager = () => {
     showAllWidgets: state.showAllWidgets,
     cleanup: state.cleanup,
   })));
+
+  // Edges the dragged widget will glue to, shown as glowing strips
+  const snapX = useWidgetStore((state) => {
+    const x = state.dragState.isDragging ? state.dragState.snap.x : null;
+    return x === 'left' || x === 'right' ? x : null;
+  });
+  const snapY = useWidgetStore((state) => (state.dragState.isDragging ? state.dragState.snap.y : null));
+  const stripClass = 'absolute rounded-full bg-primary/60 shadow-[0_0_12px_hsl(var(--primary)/0.6)] animate-pulse pointer-events-none';
 
   // Initialize widgets on mount
   useEffect(() => {
@@ -114,12 +122,19 @@ const WidgetManager = () => {
 
   return (
     <div ref={containerRef} className="widget-manager absolute inset-0 z-40 pointer-events-none">
+      {snapX && (
+        <div aria-hidden="true" className={`${stripClass} top-2 bottom-2 w-1.5 ${snapX === 'left' ? 'left-1' : 'right-1'}`} />
+      )}
+      {snapY && (
+        <div aria-hidden="true" className={`${stripClass} left-2 right-2 h-1.5 ${snapY === 'top' ? 'top-1' : 'bottom-1'}`} />
+      )}
+
       {/* Render all visible widgets */}
       {Object.keys(widgets).map(renderWidget)}
       
       {/* Widget overlay for debugging (only in development) */}
       {process.env.NODE_ENV === 'development' && (
-        <div className="absolute top-4 left-4 bg-black/80 text-white p-2 rounded text-xs pointer-events-auto z-50">
+        <div className="absolute top-4 left-4 bg-black/80 text-white p-2 rounded text-xs pointer-events-none z-0">
           <div>Widgets: {Object.keys(widgets).length}</div>
           <div>Visible: {Object.values(widgets).filter(w => w.isVisible).length}</div>
           <div>Dragging: {Object.values(widgets).filter(w => w.isDragging).length}</div>
